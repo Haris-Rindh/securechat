@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
+import SettingsModal from "./components/SettingsModal";
 import { auth, db } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { ref, onValue, off, update, get, set } from "firebase/database";
 import { decryptPrivateKey, deriveKeyFromPassword } from "./crypto";
+import { playNotificationTone } from "./audio";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -14,7 +16,12 @@ export default function App() {
   const [activeConv, setActiveConv] = useState(null);
   const [activePartner, setActivePartner] = useState(null);
   const [showMobile, setShowMobile] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [unreadMap, setUnreadMap] = useState({});
   const [loading, setLoading] = useState(true);
+
+  // Keep track of previous tick to avoid playing sound on initial load
+  const lastTickRef = useRef(0);
 
   // We can't automatically log in users who use True E2EE if we don't store their password,
   // because we need the password to decrypt their private key.
@@ -108,6 +115,45 @@ export default function App() {
     };
   }, [user, activeConv]);
 
+  // Listen for Stealth Notification Ticks
+  useEffect(() => {
+    if (!user) return;
+    const tickRef = ref(db, `users/${user.uid}/unreadTick`);
+    const unsub = onValue(tickRef, (snap) => {
+      const tick = snap.val();
+      if (tick && tick > lastTickRef.current) {
+        // If it's not the initial load and a new message arrived
+        if (lastTickRef.current > 0 && user.notificationTone) {
+          playNotificationTone(user.notificationTone);
+          
+          // Stealth Title Update
+          const oldTitle = document.title;
+          document.title = "SecureChat  ​"; // Zero-width space added
+          setTimeout(() => document.title = oldTitle, 2000);
+        }
+        lastTickRef.current = tick;
+      }
+    });
+    return () => off(tickRef, "value", unsub);
+  }, [user]);
+
+  // Listen for Unread Map
+  useEffect(() => {
+    if (!user) return;
+    const unreadRef = ref(db, `users/${user.uid}/unreadMap`);
+    const unsub = onValue(unreadRef, (snap) => {
+      setUnreadMap(snap.val() || {});
+    });
+    return () => off(unreadRef, "value", unsub);
+  }, [user]);
+
+  // Clear unread badge for active conversation
+  useEffect(() => {
+    if (user && activeConv && unreadMap[activeConv]) {
+      update(ref(db, `users/${user.uid}/unreadMap`), { [activeConv]: null });
+    }
+  }, [activeConv, unreadMap, user]);
+
   const handleLogin = async (userData, password) => {
     try {
       const pwdKey = await deriveKeyFromPassword(password, userData.uid);
@@ -163,15 +209,29 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg font-sans text-text">
+      {showSettings && (
+        <SettingsModal 
+          user={user} 
+          onClose={() => setShowSettings(false)} 
+          onUpdate={(updates) => {
+            const newUser = { ...user, ...updates };
+            setUser(newUser);
+            sessionStorage.setItem("scUser", JSON.stringify(newUser));
+          }}
+        />
+      )}
+      
       <Sidebar 
         user={user} 
         contacts={contacts} 
         activeConv={activeConv} 
+        unreadMap={unreadMap}
         onSelectConv={handleSelectConv} 
         onAddContact={handleAddContact}
         onLogout={handleLogout}
         showMobile={showMobile}
         setShowMobile={setShowMobile}
+        onOpenSettings={() => setShowSettings(true)}
       />
       
       <div className="flex-1 flex flex-col min-w-0 relative h-full">

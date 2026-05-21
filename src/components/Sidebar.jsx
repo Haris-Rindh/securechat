@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Search, Plus, UserPlus, LogOut, Copy } from "lucide-react";
+import { Search, Plus, UserPlus, LogOut, Copy, Settings } from "lucide-react";
 
-export default function Sidebar({ user, contacts, activeConv, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile }) {
+export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings }) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [addId, setAddId] = useState("");
@@ -38,9 +38,14 @@ export default function Sidebar({ user, contacts, activeConv, onSelectConv, onAd
             ID: {user.uid} <Copy size={10} />
           </div>
         </div>
-        <button onClick={onLogout} className="p-2 text-t2 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors" title="Logout">
-          <LogOut size={18} />
-        </button>
+        <div className="flex items-center">
+          <button onClick={onOpenSettings} className="p-2 text-t2 hover:text-text rounded-lg transition-colors" title="Settings">
+            <Settings size={18} />
+          </button>
+          <button onClick={onLogout} className="p-2 text-t2 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors" title="Logout">
+            <LogOut size={18} />
+          </button>
+        </div>
         {showMobile && (
           <button onClick={() => setShowMobile(false)} className="md:hidden p-2 text-t2 hover:text-text rounded-lg transition-colors">
             ✕
@@ -108,11 +113,16 @@ export default function Sidebar({ user, contacts, activeConv, onSelectConv, onAd
                   {c.name.substring(0,2).toUpperCase()}
                   {c.online && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ok rounded-full border-2 border-s1"></div>}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-text truncate">{c.name}</div>
-                  <div className="text-[0.65rem] text-t3 truncate">
-                    {uid}
+                <div className="flex-1 min-w-0 flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-sm text-text truncate">{c.name}</div>
+                    <div className="text-[0.65rem] text-t3 truncate">
+                      {uid}
+                    </div>
                   </div>
+                  {unreadMap[uid] && (
+                    <div className="w-2.5 h-2.5 bg-a rounded-full shadow-[0_0_8px_rgba(0,212,255,0.8)]"></div>
+                  )}
                 </div>
               </div>
             );

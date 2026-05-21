@@ -14,8 +14,12 @@ export default function Auth({ onLogin }) {
   const [loading, setLoading] = useState(false);
 
   const genUID = () => {
-    const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    return Array.from({ length: 8 }, () => c[Math.floor(Math.random() * c.length)]).join("");
+    const adjs = ["RED", "BLUE", "NEON", "DARK", "FAST", "WILD", "NOVA", "CYBER", "GHOST", "ZERO"];
+    const nouns = ["WOLF", "FOX", "HAWK", "BEAR", "LION", "OWL", "VIPER", "RAVEN", "STORM", "WAVE"];
+    const adj = adjs[Math.floor(Math.random() * adjs.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    const num = Math.floor(Math.random() * 99) + 1;
+    return `${adj}-${noun}-${num}`;
   };
 
   const handleAuth = async (e) => {
@@ -83,61 +87,57 @@ export default function Auth({ onLogin }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,#0a1a2e,var(--color-bg)_70%)] p-4">
-      <div className="max-w-md w-full glass-panel rounded-3xl p-8 shadow-2xl relative z-10">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold text-gradient mb-2 tracking-tight">SecureChat</h1>
-          <p className="text-t3 text-xs uppercase tracking-[0.3em] font-semibold">End-to-End Encrypted</p>
-        </div>
+      <div className="max-w-sm w-full glass-panel rounded-3xl p-8 shadow-2xl relative z-10 border border-s3">
 
         <div className="flex bg-s1 rounded-xl p-1 mb-6 border border-b">
           <button 
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${isLogin ? 'bg-s3 text-a shadow-md' : 'text-t2 hover:text-white'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${isLogin ? 'bg-s3 text-t1 shadow-md' : 'text-t3 hover:text-t2'}`}
             onClick={() => setIsLogin(true)}
           >
-            LOGIN
+            AUTH
           </button>
           <button 
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${!isLogin ? 'bg-s3 text-a shadow-md' : 'text-t2 hover:text-white'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${!isLogin ? 'bg-s3 text-t1 shadow-md' : 'text-t3 hover:text-t2'}`}
             onClick={() => setIsLogin(false)}
           >
-            SIGN UP
+            INIT
           </button>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
           {!isLogin && (
             <div>
-              <label className="block text-[0.65rem] uppercase tracking-wider text-t2 mb-1.5 ml-1">Display Name</label>
+              <label className="block text-[0.6rem] uppercase tracking-widest text-t3 mb-1.5 ml-1">Alias</label>
               <input 
                 type="text" 
                 value={name} 
                 onChange={e => setName(e.target.value)}
-                className="w-full bg-s1 border border-b rounded-xl px-4 py-3 text-text focus:outline-none focus:border-a focus:ring-1 focus:ring-a transition-all"
-                placeholder="Your name"
+                className="w-full bg-s1 border border-b rounded-xl px-4 py-3 text-t1 focus:outline-none focus:border-t1 focus:ring-1 focus:ring-t1 transition-all"
+                placeholder="..."
               />
             </div>
           )}
           
           {isLogin && (
             <div>
-              <label className="block text-[0.65rem] uppercase tracking-wider text-t2 mb-1.5 ml-1">Your Unique ID</label>
+              <label className="block text-[0.6rem] uppercase tracking-widest text-t3 mb-1.5 ml-1">Access Token</label>
               <input 
                 type="text" 
                 value={id} 
                 onChange={e => setId(e.target.value.toUpperCase())}
-                className="w-full bg-s1 border border-b rounded-xl px-4 py-3 text-text focus:outline-none focus:border-a focus:ring-1 focus:ring-a transition-all uppercase"
-                placeholder="e.g. HK4R7BNP"
+                className="w-full bg-s1 border border-b rounded-xl px-4 py-3 text-t1 focus:outline-none focus:border-t1 focus:ring-1 focus:ring-t1 transition-all uppercase"
+                placeholder="..."
               />
             </div>
           )}
 
           <div>
-            <label className="block text-[0.65rem] uppercase tracking-wider text-t2 mb-1.5 ml-1">Password</label>
+            <label className="block text-[0.6rem] uppercase tracking-widest text-t3 mb-1.5 ml-1">Passphrase</label>
             <input 
               type="password" 
               value={password} 
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-s1 border border-b rounded-xl px-4 py-3 text-text focus:outline-none focus:border-a focus:ring-1 focus:ring-a transition-all"
+              className="w-full bg-s1 border border-b rounded-xl px-4 py-3 text-t1 focus:outline-none focus:border-t1 focus:ring-1 focus:ring-t1 transition-all"
               placeholder="••••••••"
             />
           </div>
@@ -151,18 +151,11 @@ export default function Auth({ onLogin }) {
 
           <button 
             disabled={loading}
-            className="w-full bg-gradient-to-r from-a to-a2 text-black font-bold py-3.5 rounded-xl uppercase tracking-widest text-sm hover:shadow-[0_0_20px_rgba(0,212,255,0.4)] transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+            className="w-full bg-s2 border border-s3 text-t1 font-bold py-3.5 rounded-xl uppercase tracking-widest text-xs hover:bg-s3 transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
           >
-            {loading ? "Processing..." : (isLogin ? "Login to SecureChat" : "Create Account")}
+            {loading ? "..." : "Proceed"}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-xs text-t2 flex items-center justify-center gap-1.5">
-            <ShieldCheck size={14} className="text-a" /> 
-            Messages are <span className="text-a font-semibold">true end-to-end encrypted</span>.
-          </p>
-        </div>
       </div>
     </div>
   );
