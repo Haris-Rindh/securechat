@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Volume2, ShieldAlert } from "lucide-react";
 import { ref, update } from "firebase/database";
 import { db } from "../firebase";
@@ -28,7 +28,7 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
       await update(ref(db, `users/${user.uid}`), updates);
       onUpdate(updates);
       onClose();
-    } catch (err) {
+    } catch {
       alert("Failed to save settings");
     }
   };

@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { ref, set, get, update } from "firebase/database";
 import { generateKeyPair, exportPublicKey, exportPrivateKey, encryptPrivateKey, deriveKeyFromPassword } from "../crypto";
-import { KeyRound, ShieldCheck, UserPlus, LogIn, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 export default function Auth({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);

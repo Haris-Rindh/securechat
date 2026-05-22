@@ -51,7 +51,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
         try {
           const text = val.type === "text" ? await decryptMessage(val.cipher, sharedKey) : val.url;
           msgList.push({ id: key, ...val, text });
-        } catch (e) {
+        } catch {
           msgList.push({ id: key, ...val, text: "[Decryption Failed]" });
         }
       }
@@ -133,7 +133,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsRecording(true);
-    } catch (err) {
+    } catch {
       alert("Microphone access denied or unavailable.");
     }
   };
