@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
@@ -25,6 +25,15 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [unreadMap, setUnreadMap] = useState({});
 
+  const [isLocked, setIsLocked] = useState(false);
+  const [isFakeUI, setIsFakeUI] = useState(false);
+  const [isIncognito, setIsIncognito] = useState(false);
+  const [lockInput, setLockInput] = useState("");
+  
+  const lockTimerRef = useRef(null);
+  const escapePresses = useRef(0);
+  const escapeTimeout = useRef(null);
+
 
   // Keep track of previous tick to avoid playing sound on initial load
   const lastTickRef = useRef(0);
@@ -32,6 +41,88 @@ export default function App() {
   // We can't automatically log in users who use True E2EE if we don't store their password,
   // because we need the password to decrypt their private key.
   // So we handle login explicitly in Auth.jsx and set the user there.
+
+  // Panic Button Logic
+  useEffect(() => {
+    if (!user) return;
+    const handleGlobalKeyDown = (e) => {
+      const trigger = user.panicTrigger || "DoubleEscape";
+      if (trigger === "DoubleEscape" && e.key === "Escape") {
+        escapePresses.current += 1;
+        if (escapePresses.current === 2) {
+          window.location.href = "https://www.google.com";
+        }
+        clearTimeout(escapeTimeout.current);
+        escapeTimeout.current = setTimeout(() => {
+          escapePresses.current = 0;
+        }, 500);
+      } else if (trigger === "AltH" && e.altKey && e.key.toLowerCase() === "h") {
+        window.location.href = "https://www.google.com";
+      } else if (trigger === "CtrlShiftL" && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "l") {
+        window.location.href = "https://www.google.com";
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [user]);
+
+  // Auto-Lock and Privacy Screen Logic
+  const resetLockTimer = useCallback(() => {
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+    if (!user?.lockPin) return;
+    const timeoutMs = (user.autoLockTimeout || 1) * 60 * 1000;
+    lockTimerRef.current = setTimeout(() => {
+      setIsLocked(true);
+    }, timeoutMs);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !user.lockPin) return;
+
+    const handleActivity = () => {
+      if (!isLocked) resetLockTimer();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && !isFakeUI) {
+        setIsLocked(true);
+      } else {
+        handleActivity();
+      }
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("touchstart", handleActivity);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    resetLockTimer();
+
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("touchstart", handleActivity);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearTimeout(lockTimerRef.current);
+    };
+  }, [user, isLocked, resetLockTimer, isFakeUI]);
+
+  const handleUnlock = (e) => {
+    e.preventDefault();
+    if (lockInput === user.lockPin) {
+      setIsLocked(false);
+      setIsFakeUI(false);
+      setLockInput("");
+      resetLockTimer();
+    } else if (lockInput === user.duressPin && user.duressPin) {
+      setIsLocked(false);
+      setIsFakeUI(true);
+      setLockInput("");
+    } else {
+      alert("Incorrect PIN");
+      setLockInput("");
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -202,6 +293,41 @@ export default function App() {
     return <Auth onLogin={handleLogin} />;
   }
 
+  if (isLocked) {
+    return (
+      <div className="flex h-screen w-screen bg-bg items-center justify-center font-sans">
+        <form onSubmit={handleUnlock} className="glass-panel p-8 rounded-3xl max-w-sm w-full border border-s3 shadow-2xl flex flex-col items-center gap-6">
+          <div className="w-16 h-16 bg-s2 rounded-full flex items-center justify-center border border-b shadow-inner">
+            <span className="text-2xl opacity-50">🔒</span>
+          </div>
+          <h2 className="text-xl font-bold tracking-widest uppercase">App Locked</h2>
+          <input 
+            type="password" 
+            autoFocus
+            maxLength={4}
+            value={lockInput} 
+            onChange={e => setLockInput(e.target.value.replace(/\D/g, ''))}
+            className="w-full bg-s1 border border-b rounded-xl px-4 py-4 text-center text-2xl tracking-[1em] text-text focus:border-a outline-none transition-colors"
+            placeholder="••••"
+          />
+          <button type="submit" disabled={lockInput.length !== 4} className="w-full py-3 bg-a/20 text-a rounded-xl font-bold uppercase tracking-widest hover:bg-a/30 disabled:opacity-50 transition-colors">
+            Unlock
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  const fakeContacts = {
+    "DUMMY1": { name: "Alex Smith", avatarColor: "#ec4899", online: true },
+    "DUMMY2": { name: "Team Group", avatarColor: "#3b82f6", online: false },
+    "DUMMY3": { name: "Mom", avatarColor: "#10b981", online: true },
+  };
+
+  const displayedContacts = isFakeUI ? fakeContacts : contacts;
+  const displayedActiveConv = isFakeUI ? (activeConv && fakeContacts[activeConv] ? activeConv : null) : activeConv;
+  const displayedActivePartner = isFakeUI ? fakeContacts[displayedActiveConv] : activePartner;
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg font-sans text-text">
       {showSettings && (
@@ -218,8 +344,8 @@ export default function App() {
       
       <Sidebar 
         user={user} 
-        contacts={contacts} 
-        activeConv={activeConv} 
+        contacts={displayedContacts} 
+        activeConv={displayedActiveConv} 
         unreadMap={unreadMap}
         onSelectConv={handleSelectConv} 
         onAddContact={handleAddContact}
@@ -227,16 +353,20 @@ export default function App() {
         showMobile={showMobile}
         setShowMobile={setShowMobile}
         onOpenSettings={() => setShowSettings(true)}
+        isIncognito={isIncognito}
+        onToggleIncognito={() => setIsIncognito(!isIncognito)}
       />
       
       <div className="flex-1 flex flex-col min-w-0 relative h-full">
-        {activeConv && activePartner ? (
+        {displayedActiveConv && displayedActivePartner ? (
           <Chat 
             user={user} 
             privKeyJwk={privKeyJwk} 
-            partnerId={activeConv} 
-            partner={activePartner} 
+            partnerId={displayedActiveConv} 
+            partner={displayedActivePartner} 
             onToggleSidebar={() => setShowMobile(true)}
+            isFakeUI={isFakeUI}
+            isIncognito={isIncognito}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-t3">

@@ -1,18 +1,24 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Paperclip, Smile, Image as ImageIcon, File, Lock, Trash2, X, Mic, Square } from "lucide-react";
+import { Send, Paperclip, Smile, Image as ImageIcon, File, Lock, Trash2, X, Mic, Square, Timer } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 import { ref, push, onValue, off, remove } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, importPrivateKey } from "../crypto";
 
-export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSidebar }) {
+export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSidebar, isFakeUI, isIncognito }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [sharedKey, setSharedKey] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  
+  useEffect(() => {
+    const int = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(int);
+  }, []);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -38,6 +44,16 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
 
   // Subscribe to messages
   useEffect(() => {
+    if (isFakeUI) {
+      const timer = setTimeout(() => {
+        setMessages([
+          { id: "1", sender: partnerId, senderName: partner.name, ts: Date.now() - 100000, type: "text", text: "Hey, are you there?" },
+          { id: "2", sender: user.uid, senderName: user.name, ts: Date.now() - 50000, type: "text", text: "Yes, what's up?" }
+        ]);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
     if (!sharedKey || !partnerId) return;
     
     const convId = [user.uid, partnerId].sort().join("__");
@@ -46,8 +62,22 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     const unsub = onValue(msgsRef, async (snap) => {
       const data = snap.val() || {};
       const msgList = [];
+      const now = Date.now();
       
       for (const [key, val] of Object.entries(data)) {
+        if (val.expiresIn) {
+          if (!val.readAt && val.sender !== user.uid) {
+            import("firebase/database").then(({ update }) => {
+              update(ref(db, `messages/${convId}/${key}`), { readAt: now });
+            });
+            val.readAt = now;
+          }
+          if (val.readAt && now > val.readAt + val.expiresIn) {
+            remove(ref(db, `messages/${convId}/${key}`));
+            continue;
+          }
+        }
+
         try {
           const text = val.type === "text" ? await decryptMessage(val.cipher, sharedKey) : val.url;
           msgList.push({ id: key, ...val, text });
@@ -62,10 +92,40 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     });
     
     return () => off(msgsRef, "value", unsub);
-  }, [sharedKey, partnerId, user.uid]);
+  }, [sharedKey, partnerId, user.uid, isFakeUI, partner.name]);
+
+  useEffect(() => {
+    if (isFakeUI) return;
+    const interval = setInterval(() => {
+      setMessages(prev => {
+        const now = Date.now();
+        const convId = [user.uid, partnerId].sort().join("__");
+        let changed = false;
+        const filtered = prev.filter(m => {
+          if (m.expiresIn && m.readAt && now > m.readAt + m.expiresIn) {
+            remove(ref(db, `messages/${convId}/${m.id}`));
+            changed = true;
+            return false;
+          }
+          return true;
+        });
+        return changed ? filtered : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [user.uid, partnerId, isFakeUI]);
 
   const handleSend = async () => {
     if (!inputText.trim() && !file) return;
+
+    if (isFakeUI) {
+      setMessages(prev => [...prev, { id: Date.now().toString(), sender: user.uid, senderName: user.name, ts: Date.now(), type: "text", text: inputText.trim() }]);
+      setInputText("");
+      setFile(null);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      return;
+    }
+
     if (!sharedKey) return alert("Establishing secure connection... Please wait.");
     
     const convId = [user.uid, partnerId].sort().join("__");
@@ -74,6 +134,10 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       senderName: user.name,
       ts: Date.now()
     };
+
+    if (user.disappearingTimer > 0) {
+      baseMsg.expiresIn = user.disappearingTimer * 1000;
+    }
 
     setUploading(true);
 
@@ -146,10 +210,14 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
   };
 
   const uploadAndSendAudio = async (blob) => {
+    if (isFakeUI) return;
     if (!sharedKey) return;
     setUploading(true);
     const convId = [user.uid, partnerId].sort().join("__");
     const baseMsg = { sender: user.uid, senderName: user.name, ts: Date.now() };
+    if (user.disappearingTimer > 0) {
+      baseMsg.expiresIn = user.disappearingTimer * 1000;
+    }
     try {
       const fileRef = storageRef(storage, `chat_media/${convId}/${Date.now()}_audio.webm`);
       await uploadBytes(fileRef, blob);
@@ -191,6 +259,9 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     }
   };
 
+  const displayPartnerName = isIncognito ? "Hidden Contact" : partner.name;
+  const displayPartnerColor = isIncognito ? "#6b7280" : partner.avatarColor;
+
   return (
     <div className="flex-1 flex flex-col h-full bg-bg relative min-w-0">
       {/* Header */}
@@ -200,17 +271,22 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
         </button>
         <div 
           className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs"
-          style={{ backgroundColor: `${partner.avatarColor}22`, color: partner.avatarColor, border: `1px solid ${partner.avatarColor}33` }}
+          style={{ backgroundColor: `${displayPartnerColor}22`, color: displayPartnerColor, border: `1px solid ${displayPartnerColor}33` }}
         >
-          {partner.name.substring(0,2).toUpperCase()}
+          {displayPartnerName.substring(0,2).toUpperCase()}
         </div>
         <div className="flex-1">
-          <div className="font-semibold text-sm">{partner.name}</div>
+          <div className="font-semibold text-sm">{displayPartnerName}</div>
           <div className="text-[0.6rem] text-t3 flex items-center gap-1">
-            {partner.online ? <span className="w-1.5 h-1.5 rounded-full bg-ok inline-block"></span> : <span className="w-1.5 h-1.5 rounded-full bg-t3 inline-block"></span>}
-            {partner.online ? "Online" : "Offline"}
+            {partner.online && !isIncognito ? <span className="w-1.5 h-1.5 rounded-full bg-ok inline-block"></span> : <span className="w-1.5 h-1.5 rounded-full bg-t3 inline-block"></span>}
+            {partner.online && !isIncognito ? "Online" : "Offline"}
           </div>
         </div>
+        {user.disappearingTimer > 0 && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-warn/10 border border-warn/20 rounded-md text-[0.65rem] text-warn uppercase tracking-wider font-semibold mr-2">
+            <Timer size={12} /> {user.disappearingTimer >= 3600 ? `${user.disappearingTimer/3600}h` : user.disappearingTimer >= 60 ? `${user.disappearingTimer/60}m` : `${user.disappearingTimer}s`}
+          </div>
+        )}
         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-ok/10 border border-ok/20 rounded-md text-[0.65rem] text-ok uppercase tracking-wider font-semibold">
           <Lock size={12} /> True E2EE
         </div>
@@ -227,7 +303,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                   px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words relative
                   ${isMe ? 'bg-a/10 border border-a/20 rounded-tr-sm' : 'bg-s2 border border-b rounded-tl-sm'}
                 `}>
-                  {!isMe && <div className="text-[0.6rem] mb-1 font-semibold" style={{color: partner.avatarColor}}>{m.senderName}</div>}
+                  {!isMe && <div className="text-[0.6rem] mb-1 font-semibold" style={{color: displayPartnerColor}}>{isIncognito ? "Hidden Contact" : m.senderName}</div>}
                   
                   {m.type === "image" ? (
                     <img src={m.text} alt="attached" className="max-w-full max-h-60 rounded-lg object-contain cursor-pointer" onClick={() => window.open(m.text, "_blank")} />
@@ -251,6 +327,11 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                   )}
                 </div>
                 <div className="text-[0.6rem] text-t3 mt-1 px-1 flex items-center gap-1">
+                  {m.expiresIn && m.readAt && (
+                    <span className="text-warn flex items-center gap-0.5 mr-1">
+                      <Timer size={8} /> {Math.max(0, Math.ceil((m.readAt + m.expiresIn - now) / 1000))}s
+                    </span>
+                  )}
                   <Lock size={8} className="text-ok" />
                   {new Date(m.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
