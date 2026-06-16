@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>SecureChat</title>
+<style media="print">*{display:none!important}</style>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+/* ── RESET & BASE ── */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+.msg-bubble,.chat-input,input,textarea,.admin-msg-text{-webkit-user-select:text;user-select:text}
+html,body{height:100%;background:#080b0f;color:#e8f4f8;font-family:'JetBrains Mono',monospace;overflow:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:9000;opacity:.5}
+
+:root{
+  --bg:#080b0f;--s1:#0e1318;--s2:#141b22;--s3:#1a2330;
+  --b:#1f2d3d;--a:#00d4ff;--a2:#0099cc;
+  --danger:#ff3b5c;--warn:#ffaa00;--ok:#00e676;
+  --text:#e8f4f8;--t2:#7a9bb5;--t3:#3d5a72;
+  --admin:#ff6b35;--sec:#a855f7;--sec2:#7c3aed;
+  --mono:'JetBrains Mono',monospace;--dis:'Syne',sans-serif;
+  --glow:0 0 24px rgba(0,212,255,.12);
+  --sglow:0 0 32px rgba(168,85,247,.2);
+  --sidebar:280px;--topbar:56px;
+}
+
+/* ── FOCUS SHIELD ── */
+#focusShield{display:none;position:fixed;inset:0;z-index:99999;background:rgba(8,11,15,.97);backdrop-filter:blur(28px);align-items:center;justify-content:center;flex-direction:column;gap:16px}
+#focusShield.on{display:flex}
+#focusShield .si{font-size:3rem}
+#focusShield .st{font-family:var(--dis);font-size:1rem;font-weight:700;color:var(--danger);letter-spacing:3px;text-transform:uppercase}
+#focusShield .ss{font-size:.7rem;color:var(--t3);letter-spacing:1px}
+#ssb{display:none;position:fixed;top:0;left:0;right:0;background:var(--danger);color:#fff;padding:8px 20px;z-index:99998;font-size:.75rem;text-align:center;font-weight:700;letter-spacing:1px;animation:fl 1s infinite}
+@keyframes fl{0%,100%{opacity:1}50%{opacity:.7}}
+
+/* ── PAGES ── */
+.page{display:none;height:100dvh;width:100vw}
+.page.active{display:flex}
+
+/* ══════════════ AUTH ══════════════ */
+#authPage{flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse 80% 60% at 50% 0%,#0a1a2e,var(--bg) 70%);position:relative;overflow:hidden;padding:16px}
+.auth-logo{font-family:var(--dis);font-size:2.6rem;font-weight:800;letter-spacing:-2px;background:linear-gradient(135deg,var(--a) 0%,#fff 55%,var(--a));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px;text-align:center}
+.auth-sub{font-size:.68rem;letter-spacing:4px;color:var(--t3);text-transform:uppercase;margin-bottom:36px;text-align:center}
+.auth-card{background:var(--s1);border:1px solid var(--b);border-radius:20px;padding:32px;width:100%;max-width:380px;box-shadow:0 40px 80px rgba(0,0,0,.6),var(--glow);position:relative;z-index:1}
+.auth-tabs{display:flex;gap:4px;background:var(--bg);border-radius:10px;padding:4px;margin-bottom:24px}
+.auth-tab{flex:1;padding:8px;border:none;background:none;color:var(--t2);font-family:var(--mono);font-size:.72rem;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border-radius:8px;transition:all .2s}
+.auth-tab.active{background:var(--s3);color:var(--a)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:.62rem;letter-spacing:2px;color:var(--t2);text-transform:uppercase;margin-bottom:5px}
+.field input,.field textarea,.field select{width:100%;padding:11px 13px;background:var(--bg);border:1px solid var(--b);border-radius:10px;color:var(--text);font-family:var(--mono);font-size:.83rem;outline:none;transition:border-color .2s,box-shadow .2s;resize:none}
+.field input:focus,.field textarea:focus{border-color:var(--a);box-shadow:0 0 0 3px rgba(0,212,255,.08)}
+.btn{width:100%;padding:12px;background:linear-gradient(135deg,var(--a),var(--a2));border:none;border-radius:10px;color:#000;font-family:var(--mono);font-size:.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:all .2s;margin-top:8px}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,212,255,.3)}
+.btn:active{transform:translateY(0)}
+.btn.danger{background:linear-gradient(135deg,var(--danger),#cc0033);color:#fff}
+.btn.warn{background:linear-gradient(135deg,var(--warn),#cc7700);color:#000}
+.btn.ghost{background:transparent;border:1px solid var(--b);color:var(--t2)}
+.btn.ghost:hover{border-color:var(--a);color:var(--a);box-shadow:none;transform:none}
+.btn.sm{width:auto;padding:6px 13px;font-size:.68rem;margin-top:0}
+.btn.adm{background:linear-gradient(135deg,var(--admin),#cc4400);color:#fff}
+.btn.sec{background:linear-gradient(135deg,var(--sec),var(--sec2));color:#fff}
+.auth-note{margin-top:16px;padding:11px 13px;background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.1);border-radius:8px;font-size:.68rem;color:var(--t2);text-align:center;line-height:1.6}
+.auth-note span{color:var(--a);font-weight:700}
+.err{color:var(--danger);font-size:.7rem;margin-top:8px;text-align:center;min-height:18px}
+.cam-notice{margin-top:10px;padding:9px 11px;background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.2);border-radius:8px;font-size:.66rem;color:var(--warn);display:none}
+
+/* ══════════════ APP LAYOUT ══════════════ */
+#appPage{flex-direction:column}
+
+/* TOPBAR */
+.topbar{height:var(--topbar);min-height:var(--topbar);background:var(--s1);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 16px;gap:12px;z-index:10;position:relative}
+.topbar-logo{font-family:var(--dis);font-size:1.05rem;font-weight:800;color:var(--a);letter-spacing:-1px;flex-shrink:0}
+.tb-div{width:1px;height:18px;background:var(--b);flex-shrink:0}
+.tb-user{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.uav{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0;cursor:pointer;transition:all .2s;border:2px solid transparent}
+.uav:hover{transform:scale(1.08)}
+.uav.adm{background:rgba(255,107,53,.2);color:var(--admin);border-color:rgba(255,107,53,.3)}
+.uav.usr{background:rgba(0,212,255,.1);color:var(--a);border-color:rgba(0,212,255,.2)}
+.tb-name{font-size:.78rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.tb-id{font-size:.6rem;color:var(--t3)}
+.tb-badge{padding:3px 7px;border-radius:4px;font-size:.58rem;letter-spacing:1px;text-transform:uppercase;flex-shrink:0}
+.tb-badge.online{background:rgba(0,230,118,.1);color:var(--ok);border:1px solid rgba(0,230,118,.2)}
+.tb-badge.adm{background:rgba(255,107,53,.15);color:var(--admin);border:1px solid rgba(255,107,53,.3)}
+.tb-acts{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+.ib{width:32px;height:32px;background:var(--s2);border:1px solid var(--b);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:.95rem;transition:all .2s;flex-shrink:0}
+.ib:hover{border-color:var(--a);color:var(--a)}
+.ib.d:hover{border-color:var(--danger);color:var(--danger)}
+
+/* APP BODY */
+.app-body{display:flex;flex:1;overflow:hidden}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar);min-width:var(--sidebar);background:var(--s1);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;transition:transform .25s}
+.sb-head{padding:14px;border-bottom:1px solid var(--b);display:flex;align-items:center;justify-content:space-between}
+.sb-title{font-size:.62rem;letter-spacing:3px;color:var(--t3);text-transform:uppercase}
+.sb-search{padding:10px 14px;border-bottom:1px solid var(--b)}
+.sb-search input{width:100%;padding:7px 11px;background:var(--bg);border:1px solid var(--b);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:.73rem;outline:none}
+.sb-search input:focus{border-color:var(--a)}
+.contacts-list{flex:1;overflow-y:auto;padding:8px}
+.contacts-list::-webkit-scrollbar{width:3px}
+.contacts-list::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px}
+.ci{padding:9px 11px;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s;position:relative}
+.ci:hover{background:var(--s2)}
+.ci.active{background:var(--s3);border:1px solid var(--b)}
+.cav{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;background:rgba(0,212,255,.1);color:var(--a);border:1px solid rgba(0,212,255,.15);flex-shrink:0;position:relative}
+.odot{width:8px;height:8px;border-radius:50%;background:var(--ok);position:absolute;bottom:-2px;right:-2px;border:2px solid var(--s1)}
+.ci-info{flex:1;min-width:0}
+.ci-name{font-size:.78rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ci-last{font-size:.64rem;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.ci-meta{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.ci-time{font-size:.58rem;color:var(--t3)}
+.add-contact{padding:10px 14px;border-top:1px solid var(--b)}
+.add-contact input{width:100%;padding:7px 11px;background:var(--bg);border:1px solid var(--b);border-radius:8px 8px 0 0;color:var(--text);font-family:var(--mono);font-size:.73rem;outline:none;border-bottom:none}
+.add-contact button{width:100%;padding:7px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);border-radius:0 0 8px 8px;color:var(--a);font-family:var(--mono);font-size:.68rem;cursor:pointer;transition:background .15s}
+.add-contact button:hover{background:rgba(0,212,255,.15)}
+
+/* CHAT AREA */
+.chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-width:0}
+.chat-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--t3)}
+.chat-empty-icon{font-size:3rem;margin-bottom:12px;opacity:.3}
+.chat-empty-txt{font-size:.72rem;letter-spacing:2px;text-transform:uppercase}
+#chatActive{display:none;flex:1;flex-direction:column;overflow:hidden}
+#chatActive.on{display:flex}
+
+/* SECRET MODE BAR */
+.sec-bar{display:none;padding:5px 16px;background:rgba(168,85,247,.07);border-bottom:1px solid rgba(168,85,247,.2);align-items:center;gap:10px;font-size:.65rem;color:var(--sec)}
+.sec-bar.on{display:flex}
+.sec-pulse{width:6px;height:6px;border-radius:50%;background:var(--sec);animation:pu 1.5s infinite}
+@keyframes pu{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+/* CHAT HEADER */
+.ch-head{height:var(--topbar);min-height:var(--topbar);background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 16px;gap:10px}
+.ch-head-info{flex:1;min-width:0}
+.ch-name{font-size:.88rem;font-family:var(--dis);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-id{font-size:.62rem;color:var(--t3)}
+.ch-acts{display:flex;gap:6px;flex-shrink:0}
+
+/* ADMIN CAMERA IN CHAT — video panel above messages */
+#adminCamPanel{display:none;background:#000;border-bottom:1px solid rgba(255,107,53,.3);position:relative;flex-shrink:0}
+#adminCamPanel.on{display:block}
+#adminCamCanvas{width:100%;max-height:220px;object-fit:cover;display:block}
+.cam-panel-label{position:absolute;top:8px;left:10px;background:rgba(0,0,0,.75);color:var(--admin);padding:3px 9px;border-radius:5px;font-size:.62rem;letter-spacing:1px;display:flex;align-items:center;gap:5px}
+.cam-rdot{width:6px;height:6px;border-radius:50%;background:var(--danger);animation:pu 1s infinite}
+.cam-close{position:absolute;top:8px;right:10px;background:rgba(0,0,0,.7);border:none;color:#fff;border-radius:6px;padding:3px 9px;cursor:pointer;font-size:.65rem;font-family:var(--mono)}
+
+/* MESSAGES */
+.msgs-wrap{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:3px}
+.msgs-wrap::-webkit-scrollbar{width:3px}
+.msgs-wrap::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px}
+.msg-sep{text-align:center;font-size:.58rem;color:var(--t3);letter-spacing:2px;text-transform:uppercase;padding:6px 0;display:flex;align-items:center;gap:10px}
+.msg-sep::before,.msg-sep::after{content:'';flex:1;height:1px;background:var(--b)}
+.msg-row{display:flex;align-items:flex-end;gap:7px;max-width:78%}
+.msg-row.me{margin-left:auto;flex-direction:row-reverse}
+.msg-row.sys{max-width:100%;justify-content:center}
+.mav{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700;flex-shrink:0;background:rgba(0,212,255,.1);color:var(--a);border:1px solid rgba(0,212,255,.15)}
+.mav.adm{background:rgba(255,107,53,.15);color:var(--admin);border-color:rgba(255,107,53,.25)}
+.mbubble{padding:9px 13px;border-radius:15px 15px 15px 4px;background:var(--s2);border:1px solid var(--b);font-size:.8rem;line-height:1.55;word-break:break-word;position:relative;max-width:100%}
+.msg-row.me .mbubble{border-radius:15px 15px 4px 15px;background:rgba(0,212,255,.08);border-color:rgba(0,212,255,.18)}
+.msg-row.me.adms .mbubble{background:rgba(255,107,53,.08);border-color:rgba(255,107,53,.2)}
+.msg-row.secm .mbubble{background:rgba(168,85,247,.08);border-color:rgba(168,85,247,.2)}
+.msg-row.me.secm .mbubble{background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.28)}
+.mmeta{font-size:.56rem;color:var(--t3);margin-top:3px;display:flex;gap:5px;align-items:center}
+.msg-row.me .mmeta{justify-content:flex-end}
+.mei{font-size:.52rem;color:var(--ok)}
+/* message media */
+.msg-img{max-width:100%;max-height:220px;border-radius:10px;cursor:pointer;display:block;margin-top:4px;object-fit:cover}
+.msg-vid{max-width:100%;max-height:220px;border-radius:10px;display:block;margin-top:4px}
+.msg-actions{position:absolute;top:-26px;right:0;display:none;gap:3px;background:var(--s3);border:1px solid var(--b);border-radius:7px;padding:3px}
+.mbubble:hover .msg-actions{display:flex}
+.mab{width:20px;height:20px;background:none;border:none;color:var(--t2);cursor:pointer;border-radius:4px;font-size:.65rem;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.mab:hover{background:var(--danger);color:#fff}
+
+/* INPUT AREA */
+.input-area{padding:12px 16px;background:var(--s1);border-top:1px solid var(--b);display:flex;align-items:flex-end;gap:10px;flex-shrink:0}
+.input-area.sec{border-top-color:rgba(168,85,247,.4);background:rgba(168,85,247,.03)}
+.input-wrap{flex:1;background:var(--s2);border:1px solid var(--b);border-radius:13px;padding:9px 13px;display:flex;align-items:flex-end;gap:7px;transition:border-color .2s;min-width:0}
+.input-wrap:focus-within{border-color:var(--a)}
+.input-wrap.sec:focus-within{border-color:var(--sec)}
+.chat-input{flex:1;background:none;border:none;color:var(--text);font-family:var(--mono);font-size:.8rem;outline:none;resize:none;max-height:110px;line-height:1.5;min-width:0}
+.send-btn{width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,var(--a),var(--a2));border:none;border-radius:9px;color:#000;font-size:.95rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center}
+.send-btn:hover{transform:scale(1.05);box-shadow:0 4px 16px rgba(0,212,255,.3)}
+.send-btn.sec{background:linear-gradient(135deg,var(--sec),var(--sec2));color:#fff}
+.send-btn.sec:hover{box-shadow:0 4px 16px rgba(168,85,247,.35)}
+/* media attach button */
+.attach-btn{width:32px;height:32px;flex-shrink:0;background:var(--s3);border:1px solid var(--b);border-radius:9px;color:var(--t2);font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.attach-btn:hover{border-color:var(--a);color:var(--a)}
+/* media preview strip above input */
+.media-preview{display:none;padding:8px 16px 0;background:var(--s1);gap:8px;flex-wrap:wrap;border-top:1px solid var(--b)}
+.media-preview.on{display:flex}
+.media-thumb{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;flex-shrink:0}
+.media-thumb img,.media-thumb video{width:100%;height:100%;object-fit:cover}
+.media-thumb-del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.7);border:none;color:#fff;border-radius:4px;width:18px;height:18px;cursor:pointer;font-size:.65rem;display:flex;align-items:center;justify-content:center}
+
+/* ENC STATUS */
+.enc-status{display:flex;align-items:center;gap:5px;padding:3px 16px;font-size:.58rem;color:var(--ok);letter-spacing:1px;border-top:1px solid var(--b);background:var(--s1);flex-shrink:0}
+.enc-status.sec{color:var(--sec);border-top-color:rgba(168,85,247,.18)}
+
+/* ══════════════ ADMIN PAGE ══════════════ */
+#adminPage{flex-direction:column;background:var(--bg)}
+.adm-topbar{height:var(--topbar);min-height:var(--topbar);background:var(--s1);border-bottom:1px solid rgba(255,107,53,.3);display:flex;align-items:center;padding:0 20px;gap:14px}
+.adm-logo{font-family:var(--dis);font-size:1.05rem;font-weight:800;color:var(--admin);letter-spacing:-1px}
+.adm-badge{padding:3px 9px;background:rgba(255,107,53,.15);border:1px solid rgba(255,107,53,.3);border-radius:5px;font-size:.58rem;color:var(--admin);letter-spacing:2px;text-transform:uppercase}
+.adm-body{display:flex;flex:1;overflow:hidden}
+.adm-sb{width:290px;min-width:290px;background:var(--s1);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden}
+.adm-sb-title{padding:11px 14px;font-size:.58rem;letter-spacing:3px;color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--b)}
+.adm-users{flex:1;overflow-y:auto;padding:7px}
+.adm-users::-webkit-scrollbar{width:3px}
+.adm-users::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px}
+.adm-ui{padding:11px;border-radius:10px;margin-bottom:4px;background:var(--s2);border:1px solid var(--b);cursor:pointer;transition:all .15s}
+.adm-ui:hover{border-color:var(--admin)}
+.adm-ui-top{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.adm-ui-name{font-size:.8rem;flex:1}
+.adm-ui-st{font-size:.6rem;color:var(--t3)}
+.adm-ui-id{font-size:.63rem;color:var(--t3)}
+.adm-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.adm-tabs{display:flex;background:var(--s1);border-bottom:1px solid var(--b);padding:0 14px;overflow-x:auto}
+.adm-tabs::-webkit-scrollbar{height:0}
+.atb{padding:13px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--t2);font-family:var(--mono);font-size:.68rem;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s;white-space:nowrap}
+.atb.active{color:var(--admin);border-bottom-color:var(--admin)}
+.adm-panel{flex:1;overflow-y:auto;padding:18px;display:none}
+.adm-panel.active{display:block}
+.adm-panel::-webkit-scrollbar{width:3px}
+.adm-panel::-webkit-scrollbar-thumb{background:var(--b);border-radius:3px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.stat-card{background:var(--s2);border:1px solid var(--b);border-radius:11px;padding:14px}
+.sv{font-size:1.7rem;font-family:var(--dis);font-weight:700;color:var(--a)}
+.sl{font-size:.58rem;color:var(--t3);text-transform:uppercase;letter-spacing:2px;margin-top:3px}
+.stat-card.wc .sv{color:var(--warn)}
+.stat-card.dc .sv{color:var(--danger)}
+.sec-lbl{font-size:.58rem;letter-spacing:3px;color:var(--t3);text-transform:uppercase;margin-bottom:10px;padding-bottom:7px;border-bottom:1px solid var(--b)}
+.conv-btn{padding:5px 12px;background:var(--s2);border:1px solid var(--b);border-radius:7px;color:var(--t2);font-family:var(--mono);font-size:.68rem;cursor:pointer;transition:all .15s}
+.conv-btn.active{border-color:var(--admin);color:var(--admin);background:rgba(255,107,53,.08)}
+.adm-msgs{display:flex;flex-direction:column;gap:7px;max-height:380px;overflow-y:auto}
+.ami{padding:9px 13px;border-radius:9px;background:var(--s2);border:1px solid var(--b);position:relative}
+.ami-s{font-size:.62rem;color:var(--a);margin-bottom:3px}
+.ami-t{font-size:.78rem}
+.ami-m{font-size:.56rem;color:var(--t3);margin-top:3px}
+.ami-del{position:absolute;top:7px;right:7px;background:none;border:none;color:var(--t3);cursor:pointer;font-size:.72rem;transition:color .15s}
+.ami-del:hover{color:var(--danger)}
+.no-conv{color:var(--t3);font-size:.73rem;padding:18px;text-align:center}
+/* admin camera panel */
+.cam-feed-adm{width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;overflow:hidden;margin-bottom:14px;position:relative;display:none}
+.cam-feed-adm.on{display:block}
+.cam-lbl{position:absolute;top:9px;left:9px;background:rgba(0,0,0,.75);color:var(--admin);padding:3px 9px;border-radius:5px;font-size:.62rem;letter-spacing:1px;display:flex;align-items:center;gap:5px}
+.cdot{width:6px;height:6px;border-radius:50%;background:var(--danger);animation:pu 1s infinite}
+/* admin cam in chat panel (for admin who is currently chatting) */
+#adminChatCamWrap{display:none}
+#adminChatCamWrap.on{display:block}
+
+/* ══════════════ MODALS ══════════════ */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.86);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(7px);padding:16px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--s1);border:1px solid var(--b);border-radius:18px;padding:24px;width:100%;max-width:460px;box-shadow:0 40px 80px rgba(0,0,0,.8)}
+.modal.sm{background:var(--s1);border:1px solid var(--b);border-radius:18px;padding:24px;width:100%;max-width:380px}
+.modal.sec-modal{border-color:rgba(168,85,247,.4);box-shadow:0 40px 80px rgba(0,0,0,.8),var(--sglow)}
+.modal.wide{max-width:520px}
+.mtitle{font-family:var(--dis);font-size:1rem;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:9px}
+.mtitle.danger{color:var(--danger)}
+.mtitle.admc{color:var(--admin)}
+.mtitle.secc{color:var(--sec)}
+.mfooter{margin-top:18px;display:flex;gap:8px}
+.mfooter .btn{flex:1}
+
+/* Profile */
+.av-picker{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.av-opt{width:32px;height:32px;border-radius:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;border:3px solid transparent;transition:all .15s}
+.av-opt.sel{border-color:#fff;transform:scale(1.12)}
+.av-prev{width:60px;height:60px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:700;font-family:var(--dis);margin:0 auto 18px;border:3px solid rgba(255,255,255,.1)}
+.bio-cnt{font-size:.58rem;color:var(--t3);text-align:right;margin-top:3px}
+
+/* Tab recorder */
+.tab-rec{background:var(--bg);border:2px dashed var(--b);border-radius:13px;padding:22px;text-align:center;transition:all .3s;cursor:pointer;outline:none}
+.tab-rec:focus,.tab-rec.rec{border-color:var(--sec);box-shadow:var(--sglow)}
+.tab-rec.rec{background:rgba(168,85,247,.04)}
+.tab-rec-lbl{font-size:.7rem;color:var(--t2);letter-spacing:1px;margin-bottom:10px}
+.tab-dots{display:flex;justify-content:center;gap:5px;min-height:20px;flex-wrap:wrap;margin-bottom:6px}
+.tdot{width:13px;height:13px;border-radius:50%;background:var(--sec);opacity:0;transition:opacity .15s,transform .15s}
+.tdot.lit{opacity:1;transform:scale(1.2)}
+.tab-hint{font-size:.6rem;color:var(--t3)}
+.tab-str{margin-top:10px;font-size:.62rem}
+.tab-str.weak{color:var(--danger)}.tab-str.medium{color:var(--warn)}.tab-str.strong{color:var(--ok)}
+
+/* Secret zone modal tabs */
+.sz-tabs{display:flex;gap:4px;background:var(--bg);border-radius:10px;padding:4px;margin-bottom:18px}
+
+/* Delete options */
+.del-opts{display:flex;flex-direction:column;gap:9px}
+.del-opt{padding:13px;border:1px solid var(--b);border-radius:10px;cursor:pointer;transition:all .15s;background:var(--s2)}
+.del-opt:hover{border-color:var(--danger);background:rgba(255,59,92,.05)}
+.del-opt-t{font-size:.78rem;color:var(--text);margin-bottom:3px}
+.del-opt-d{font-size:.64rem;color:var(--t3)}
+
+/* image viewer */
+#imgViewer{position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:9998;display:none;align-items:center;justify-content:center}
+#imgViewer.open{display:flex}
+#imgViewer img{max-width:95vw;max-height:95vh;border-radius:10px;object-fit:contain}
+#imgViewer .close-iv{position:fixed;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.8rem}
+
+/* Toast */
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:99997;display:flex;flex-direction:column;gap:7px}
+.toast{padding:11px 16px;background:var(--s3);border:1px solid var(--b);border-radius:9px;font-size:.72rem;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:sli .3s ease;max-width:280px}
+.toast.success{border-color:rgba(0,230,118,.3);color:var(--ok)}
+.toast.error{border-color:rgba(255,59,92,.3);color:var(--danger)}
+.toast.info{border-color:rgba(0,212,255,.3);color:var(--a)}
+.toast.warn{border-color:rgba(255,170,0,.3);color:var(--warn)}
+.toast.sec{border-color:rgba(168,85,247,.4);color:var(--sec)}
+@keyframes sli{from{transform:translateX(18px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* Loading */
+.loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100000}
+.ll{font-family:var(--dis);font-size:2rem;font-weight:800;color:var(--a);margin-bottom:22px}
+.lb{width:180px;height:2px;background:var(--s2);border-radius:2px;overflow:hidden}
+.lf{height:100%;background:var(--a);border-radius:2px;animation:lda 2s ease forwards}
+@keyframes lda{from{width:0}to{width:100%}}
+.lt{margin-top:14px;font-size:.62rem;color:var(--t3);letter-spacing:3px;text-transform:uppercase}
+
+/* ══════════════ RESPONSIVE ══════════════ */
+@media(max-width:768px){
+  :root{--sidebar:100vw}
+  .app-body{position:relative}
+  .sidebar{position:absolute;top:0;left:0;height:100%;z-index:5;transform:translateX(-100%)}
+  .sidebar.mob-open{transform:translateX(0)}
+  .chat-area{width:100%}
+  .tb-id,.tb-badge{display:none}
+  .tb-name{max-width:90px}
+  #menuBtn{display:flex!important}
+  .adm-sb{display:none;position:absolute;top:0;left:0;height:100%;z-index:5}
+  .adm-sb.mob-open{display:flex}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .modal{padding:18px}
+  .auth-card{padding:22px}
+}
+@media(max-width:480px){
+  .auth-logo{font-size:2rem}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .adm-tabs{padding:0 8px}
+  .atb{padding:12px 10px;font-size:.62rem}
+}
+#menuBtn{display:none;width:32px;height:32px;background:var(--s2);border:1px solid var(--b);border-radius:8px;cursor:pointer;align-items:center;justify-content:center;color:var(--t2);font-size:1rem;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- Focus shield -->
+<div id="focusShield"><div class="si">🛡️</div><div class="st">Content Hidden</div><div class="ss">Return to app to continue</div></div>
+<div id="ssb">⚠️ SCREEN SHARING DETECTED — Chat content is protected</div>
+
+<!-- Loading -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="ll">SecureChat</div>
+  <div class="lb"><div class="lf"></div></div>
+  <div class="lt">Initializing encryption</div>
+</div>
+
+<!-- Toast -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- Image viewer -->
+<div id="imgViewer"><img id="ivImg" src=""/><button class="close-iv" onclick="document.getElementById('imgViewer').classList.remove('open')">✕ Close</button></div>
+
+<!-- Hidden file input -->
+<input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="onFilePicked(event)"/>
+
+<!-- ═══════ AUTH ═══════ -->
+<div class="page" id="authPage">
+  <div class="auth-logo">SecureChat</div>
+  <div class="auth-sub">End-to-End Encrypted</div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+      <button class="auth-tab" onclick="switchTab('signup')">Sign Up</button>
+    </div>
+    <div id="loginForm">
+      <div class="field"><label>Your Unique ID</label><input type="text" id="loginId" placeholder="Enter your unique ID" autocomplete="off" style="text-transform:uppercase"/></div>
+      <div class="field"><label>Password</label><input type="password" id="loginPass" placeholder="••••••••"/></div>
+      <button class="btn" onclick="doLogin()">Login</button>
+      <div class="err" id="loginErr"></div>
+    </div>
+    <div id="signupForm" style="display:none">
+      <div class="field"><label>Display Name</label><input type="text" id="signupName" placeholder="Your name" autocomplete="off"/></div>
+      <div class="field"><label>Password</label><input type="password" id="signupPass" placeholder="Min 8 characters"/></div>
+      <div class="field"><label>Confirm Password</label><input type="password" id="signupPass2" placeholder="Repeat"/></div>
+      <div class="cam-notice" id="camNotice">📷 Camera & mic access will be requested once for video features.</div>
+      <button class="btn" onclick="doSignup()">Create Account</button>
+      <div class="err" id="signupErr"></div>
+    </div>
+    <div class="auth-note">🔒 Messages are <span>end-to-end encrypted</span>. Share your <span>Unique ID</span> with others to chat.</div>
+  </div>
+</div>
+
+<!-- ═══════ MAIN APP ═══════ -->
+<div class="page" id="appPage">
+  <div class="topbar">
+    <button id="menuBtn" onclick="toggleMobileSidebar()">☰</button>
+    <div class="topbar-logo">SecureChat</div>
+    <div class="tb-div"></div>
+    <div class="tb-user">
+      <div class="uav usr" id="tbAvatar" onclick="openProfileModal()" title="Edit Profile">U</div>
+      <div>
+        <div class="tb-name" id="tbName">User</div>
+        <div class="tb-id" id="tbId">ID: —</div>
+      </div>
+      <div class="tb-badge online" style="margin-left:6px">● Online</div>
+    </div>
+    <div class="tb-acts">
+      <div class="ib" onclick="copyMyId()" title="Copy ID">📋</div>
+      <div class="ib" onclick="openProfileModal()" title="Edit Profile">✏️</div>
+      <div class="ib d" onclick="doLogout()" title="Logout">🚪</div>
+    </div>
+  </div>
+
+  <div class="app-body">
+    <div class="sidebar" id="sidebar">
+      <div class="sb-head">
+        <span class="sb-title">Conversations</span>
+        <div class="ib" onclick="toggleAddContact()" style="width:24px;height:24px;font-size:.8rem">+</div>
+      </div>
+      <div class="sb-search"><input type="text" placeholder="Search..." oninput="filterContacts(this.value)"/></div>
+      <div class="contacts-list" id="contactsList"></div>
+      <div class="add-contact" id="addContactArea" style="display:none">
+        <input type="text" id="addContactInput" placeholder="Paste user ID..." autocomplete="off" style="text-transform:uppercase"/>
+        <button onclick="addContact()">Add Contact</button>
+      </div>
+    </div>
+
+    <div class="chat-area" id="chatArea">
+      <div class="chat-empty" id="chatEmpty">
+        <div class="chat-empty-icon">💬</div>
+        <div class="chat-empty-txt">Select a conversation</div>
+      </div>
+
+      <div id="chatActive">
+        <div class="sec-bar" id="secBar">
+          <div class="sec-pulse"></div>
+          <span>SECRET CHAT ACTIVE</span>
+          <span style="margin-left:auto;font-size:.6rem;opacity:.6">🔒 Separately encrypted</span>
+          <button class="btn ghost sm" onclick="exitSecretMode()" style="margin-left:8px;padding:3px 9px;font-size:.58rem">Exit</button>
+        </div>
+
+        <div class="ch-head">
+          <div class="cav" style="width:32px;height:32px;font-size:.68rem" id="chAv">U</div>
+          <div class="ch-head-info">
+            <div class="ch-name" id="chName">—</div>
+            <div class="ch-id" id="chId">—</div>
+          </div>
+          <div class="ch-acts">
+            <!-- Admin-only: camera button shown in chat header -->
+            <div class="ib" id="admCamBtn" style="display:none" title="View user camera" onclick="toggleAdminCamInChat()">📷</div>
+            <div class="ib d" onclick="deleteChatWith()" title="Delete">🗑️</div>
+          </div>
+        </div>
+
+        <!-- Admin camera panel (shows above messages when active) -->
+        <div id="adminCamPanel">
+          <canvas id="adminCamCanvas"></canvas>
+          <div class="cam-panel-label"><span class="cam-rdot"></span><span id="camPanelLabel">LIVE</span></div>
+          <button class="cam-close" onclick="stopAdminCamInChat()">✕ Stop</button>
+        </div>
+
+        <!-- Media preview (before sending) -->
+        <div class="media-preview" id="mediaPreview"></div>
+
+        <div class="msgs-wrap" id="msgsWrap"></div>
+        <div class="enc-status" id="encStatus">🔒 End-to-end encrypted</div>
+        <div class="input-area" id="inputArea">
+          <button class="attach-btn" onclick="openFilePicker()" title="Attach image/video">📎</button>
+          <div class="input-wrap" id="inputWrap">
+            <textarea class="chat-input" id="chatInput" rows="1" placeholder="Type a message..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          </div>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ ADMIN PAGE ═══════ -->
+<div class="page" id="adminPage">
+  <div class="adm-topbar">
+    <button id="admMenuBtn" onclick="toggleAdminMobileSidebar()" style="display:none;width:30px;height:30px;background:var(--s2);border:1px solid var(--b);border-radius:7px;cursor:pointer;color:var(--t2);font-size:.95rem;align-items:center;justify-content:center">☰</button>
+    <div class="adm-logo">SecureChat</div>
+    <div class="tb-div"></div>
+    <div class="adm-badge">⚡ Admin</div>
+    <div style="margin-left:auto;display:flex;gap:7px;align-items:center">
+      <span style="font-size:.68rem;color:var(--t2)" id="admLabel"></span>
+      <div class="ib" onclick="adminGoToChat()" title="Chat as user">💬</div>
+      <div class="ib d" onclick="doLogout()">🚪</div>
+    </div>
+  </div>
+  <div class="adm-body">
+    <div class="adm-sb" id="admSidebar">
+      <div class="adm-sb-title">Registered Users</div>
+      <div class="adm-users" id="admUsersList"></div>
+    </div>
+    <div class="adm-main">
+      <div class="adm-tabs">
+        <button class="atb active" onclick="swAdmTab('overview',this)">Overview</button>
+        <button class="atb" onclick="swAdmTab('chats',this)">Chat Monitor</button>
+        <button class="atb" onclick="swAdmTab('camera',this)">Camera</button>
+        <button class="atb" onclick="swAdmTab('controls',this)">Controls</button>
+      </div>
+      <div class="adm-panel active" id="panel-overview">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="sv" id="statUsers">0</div><div class="sl">Total Users</div></div>
+          <div class="stat-card wc"><div class="sv" id="statOnline">0</div><div class="sl">Online Now</div></div>
+          <div class="stat-card dc"><div class="sv" id="statMsgs">0</div><div class="sl">Messages</div></div>
+        </div>
+        <div class="sec-lbl">All Users</div>
+        <div id="overviewList" style="display:flex;flex-direction:column;gap:7px"></div>
+      </div>
+      <div class="adm-panel" id="panel-chats">
+        <div class="sec-lbl">Select Conversation</div>
+        <div id="convBtns" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px"></div>
+        <div id="admChatView" class="adm-msgs"></div>
+      </div>
+      <div class="adm-panel" id="panel-camera">
+        <div class="sec-lbl">Camera Access</div>
+        <p style="font-size:.73rem;color:var(--t2);margin-bottom:14px;line-height:1.7">Activate a user's camera. Their device shows a recording indicator — no popup shown to them.</p>
+        <div id="camUserBtns" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px"></div>
+        <div class="cam-feed-adm" id="admCamFeed">
+          <canvas id="admCamCanvas"></canvas>
+          <div class="cam-lbl"><span class="cdot"></span><span id="admCamLabel">LIVE</span></div>
+        </div>
+        <div id="admCamStopWrap" style="display:none;margin-top:10px">
+          <button class="btn danger sm" onclick="stopAdminCameraPanel()">Stop Camera</button>
+        </div>
+      </div>
+      <div class="adm-panel" id="panel-controls">
+        <div class="sec-lbl">Global Controls</div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <div style="background:var(--s2);border:1px solid var(--b);border-radius:11px;padding:14px">
+            <div style="font-size:.78rem;margin-bottom:3px">Delete All Messages</div>
+            <div style="font-size:.65rem;color:var(--t3);margin-bottom:10px">Permanently delete every message from all conversations.</div>
+            <button class="btn danger sm" onclick="adminDeleteAll()">🗑️ Delete All</button>
+          </div>
+          <div style="background:var(--s2);border:1px solid var(--b);border-radius:11px;padding:14px">
+            <div style="font-size:.78rem;margin-bottom:3px">Auto-Delete on Browser Close</div>
+            <div style="font-size:.65rem;color:var(--t3);margin-bottom:10px">Selected user's chats vanish when they close browser.</div>
+            <div id="autoDelbBtns" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px"></div>
+            <div id="autoDelStatus" style="font-size:.65rem;color:var(--warn)"></div>
+          </div>
+          <div style="background:var(--s2);border:1px solid var(--b);border-radius:11px;padding:14px">
+            <div style="font-size:.78rem;margin-bottom:3px">Force Disconnect</div>
+            <div style="font-size:.65rem;color:var(--t3);margin-bottom:10px">Kick a user and invalidate their session.</div>
+            <div id="kickBtns" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ MODALS ═══════ -->
+
+<!-- Profile -->
+<div class="modal-overlay" id="profileModal">
+  <div class="modal">
+    <div class="mtitle" style="color:var(--a)">✏️ Edit Profile</div>
+    <div class="av-prev" id="avPrev">U</div>
+    <div class="field"><label>Avatar Color</label><div class="av-picker" id="avPicker"></div></div>
+    <div class="field"><label>Display Name</label><input type="text" id="profName" placeholder="Your name" maxlength="30" oninput="updAvPrev()"/></div>
+    <div class="field"><label>Bio <span style="color:var(--t3);font-size:.58rem">(optional)</span></label><textarea id="profBio" placeholder="A bit about yourself..." rows="3" maxlength="120" oninput="updBioCnt()"></textarea><div class="bio-cnt"><span id="bioCnt">0</span>/120</div></div>
+    <div class="mfooter">
+      <button class="btn ghost" onclick="closeModal('profileModal')">Cancel</button>
+      <button class="btn" onclick="saveProfile()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Secret setup -->
+<div class="modal-overlay" id="secretSetupModal">
+  <div class="modal sec-modal">
+    <div class="mtitle secc">🔮 Setup Secret Chat</div>
+    <p style="font-size:.73rem;color:var(--t2);margin-bottom:18px;line-height:1.7">Click below and press <kbd style="background:var(--s3);padding:2px 6px;border-radius:4px">Tab</kbd> in your secret rhythm. The <strong>timing</strong> between presses matters — like Morse code. Min 3 presses.</p>
+    <div class="tab-rec" id="tabRec" tabindex="0" onclick="focusTabRec()" onkeydown="onTabRecKey(event)">
+      <div class="tab-rec-lbl">Click here, then press Tab in your rhythm</div>
+      <div class="tab-dots" id="tabDots"></div>
+      <div class="tab-hint" id="tabHint">🎯 Click to start</div>
+    </div>
+    <div class="tab-str" id="tabStr"></div>
+    <div style="margin-top:14px;padding:11px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.14);border-radius:9px;font-size:.66rem;color:var(--t2);line-height:1.8">💡 Pattern is stored <strong>only on this device</strong>. Wrong pattern = silence, no error shown.</div>
+    <div class="mfooter">
+      <button class="btn ghost" onclick="closeModal('secretSetupModal')">Cancel</button>
+      <button class="btn sec" id="savePatBtn" onclick="savePat()" disabled>Set Pattern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Secret zone -->
+<div class="modal-overlay" id="secretZoneModal">
+  <div class="modal sec-modal wide">
+    <div class="mtitle secc">🔮 Secret Zone</div>
+    <div class="sz-tabs">
+      <button class="auth-tab active" id="szT1" onclick="swSZ('contacts')">My Secret Contacts</button>
+      <button class="auth-tab" id="szT2" onclick="swSZ('add')">+ Add Hidden</button>
+      <button class="auth-tab" id="szT3" onclick="swSZ('regular')">From Regular</button>
+    </div>
+    <div id="szPContacts">
+      <div id="szList" style="display:flex;flex-direction:column;gap:7px;max-height:280px;overflow-y:auto"></div>
+      <div id="szEmpty" style="color:var(--t3);font-size:.73rem;padding:18px;text-align:center;display:none">No secret-only contacts yet.<br/>Use "+ Add Hidden" to add someone.</div>
+    </div>
+    <div id="szPAdd" style="display:none">
+      <div style="font-size:.7rem;color:var(--t2);margin-bottom:13px;line-height:1.7">Enter a User ID to add as <strong style="color:var(--sec)">secret-only</strong> — they never appear in your regular sidebar.</div>
+      <div class="field"><label>User ID</label><input type="text" id="szAddId" placeholder="Paste User ID..." autocomplete="off" style="text-transform:uppercase"/></div>
+      <div class="field"><label>Nickname <span style="color:var(--t3);font-size:.58rem">(only you see this)</span></label><input type="text" id="szAddNick" placeholder="Optional..." autocomplete="off"/></div>
+      <button class="btn sec" onclick="addSecretContact()" style="margin-top:4px">Add to Secret Zone</button>
+      <div class="err" id="szAddErr" style="margin-top:7px"></div>
+    </div>
+    <div id="szPRegular" style="display:none">
+      <div style="font-size:.7rem;color:var(--t2);margin-bottom:13px;line-height:1.7">Open a secret conversation with a regular contact. They stay in the sidebar, only the chat is secret.</div>
+      <div id="szRegList" style="display:flex;flex-direction:column;gap:7px;max-height:280px;overflow-y:auto"></div>
+    </div>
+    <div class="mfooter" style="margin-top:16px">
+      <button class="btn ghost" onclick="closeModal('secretZoneModal')">Close</button>
+      <button class="btn warn" style="width:auto;padding:6px 13px;font-size:.68rem;margin-top:0" onclick="openSecretSetup()">Change Pattern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete chat -->
+<div class="modal-overlay" id="deleteChatModal">
+  <div class="modal sm">
+    <div class="mtitle danger">🗑️ Delete Conversation</div>
+    <div class="del-opts">
+      <div class="del-opt" onclick="execDel('me')"><div class="del-opt-t">Delete for me only</div><div class="del-opt-d">Messages removed from your side only.</div></div>
+      <div class="del-opt" onclick="execDel('both')"><div class="del-opt-t">Delete for both sides</div><div class="del-opt-d">Permanently removed for both users.</div></div>
+      <div class="del-opt" onclick="execDel('onclose')"><div class="del-opt-t">Delete when they close browser</div><div class="del-opt-d">Auto-deletes from both sides on browser close.</div></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn ghost" onclick="closeModal('deleteChatModal')">Cancel</button></div>
+  </div>
+</div>
+
+<!-- Camera modal (user side — silent, no popup shown, just activates) -->
+<!-- No visible modal for user — camera activates silently via JS -->
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase,ref,set,get,push,onValue,off,remove,update,onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+/* ═══════════════════════════════════════
+   FIREBASE CONFIG — Replace with yours
+═══════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAmA5wiUQFNP80t9lOWK03fTOVYOVIgGRU",
+  authDomain: "chat-e44ca.firebaseapp.com",
+  databaseURL: "https://chat-e44ca-default-rtdb.firebaseio.com",
+  projectId: "chat-e44ca",
+  storageBucket: "chat-e44ca.firebasestorage.app",
+  messagingSenderId: "344219692344",
+  appId: "1:344219692344:web:a50b4b3f21e2a4f64225cd",
+  measurementId: "G-Y8T14D8CPE"
+};
+
+const ADMIN_ID   = "ADMIN";
+const ADMIN_PASS = "Haris786.";
+const IMGUR_CLIENT  = "YOUR_IMGUR_CLIENT_ID";  // ← From api.imgur.com/oauth2/addclient
+const AV_COLORS     = ["#00d4ff","#ff6b35","#a855f7","#00e676","#ff3b5c","#ffaa00","#3b82f6","#ec4899","#10b981","#f59e0b"];
+
+const fbApp = initializeApp(firebaseConfig);
+const db    = getDatabase(fbApp);
+
+/* ═══ STATE ═══ */
+let CU = null;           // current user
+let activeConv = null;   // active conv id
+let contacts   = {};
+let allMsgs    = {};
+let listeners  = [];
+let localStream = null;
+let adminCamTarget = null;
+let adminCamListener = null;
+let isSecret   = false;
+let secretPartner = null;
+let pendingFiles  = [];  // files queued to send
+
+/* ═══ CRYPTO ═══ */
+async function sha256(s){
+  const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+async function deriveKey(sec){
+  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(sec.slice(0,32).padEnd(32,"0")),{name:"PBKDF2"},false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:new TextEncoder().encode("sc-v3"),iterations:120000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function encMsg(text,sec){
+  const key=await deriveKey(sec);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const enc=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...iv)+String.fromCharCode(...new Uint8Array(enc)));
+}
+async function decMsg(cipher,sec){
+  try{
+    const raw=atob(cipher);
+    const iv=new Uint8Array([...raw].slice(0,12).map(c=>c.charCodeAt(0)));
+    const data=new Uint8Array([...raw].slice(12).map(c=>c.charCodeAt(0)));
+    const key=await deriveKey(sec);
+    const dec=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,data);
+    return new TextDecoder().decode(dec);
+  }catch{return "[Encrypted message]";}
+}
+function cid(a,b){return[a,b].sort().join("__")}
+function scid(a,b){return"sc__"+[a,b].sort().join("__")}
+
+/* ═══ TAB PATTERN ═══ */
+let tabTimings=[],tabTimer=null,tabRec=false;
+let gTabTimings=[],gTabTimer=null;
+
+function patSig(ts){
+  if(ts.length<2)return String(ts.length);
+  const ivs=[];for(let i=1;i<ts.length;i++)ivs.push(ts[i]-ts[i-1]);
+  const mx=Math.max(...ivs);
+  return ts.length+":"+ivs.map(v=>v/mx<.25?"A":v/mx<.5?"B":v/mx<.75?"C":"D").join("");
+}
+async function sigHash(sig){
+  let ds=localStorage.getItem("_dsk");
+  if(!ds){ds=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,"0")).join("");localStorage.setItem("_dsk",ds);}
+  return sha256(sig+ds+"sc3");
+}
+function patStr(ts){
+  if(ts.length<3)return"weak";
+  if(ts.length<5)return"medium";
+  return"strong";
+}
+document.addEventListener("keydown",async e=>{
+  const ac=document.activeElement;
+  if(ac&&ac.id==="tabRec")return;
+  if(ac&&(ac.tagName==="INPUT"||ac.tagName==="TEXTAREA"))return;
+  if(e.key!=="Tab")return;
+  e.preventDefault();
+  gTabTimings.push(Date.now());
+  clearTimeout(gTabTimer);
+  gTabTimer=setTimeout(async()=>{
+    if(gTabTimings.length>=3){
+      const sig=patSig(gTabTimings);
+      const h=await sigHash(sig);
+      const stored=localStorage.getItem("_sph");
+      if(stored&&h===stored)openSecretZone();
+    }
+    gTabTimings=[];
+  },2000);
+});
+
+/* ═══ UI HELPERS ═══ */
+function toast(msg,type="info"){
+  const el=document.createElement("div");
+  el.className=`toast ${type}`;el.textContent=msg;
+  document.getElementById("toastWrap").appendChild(el);
+  setTimeout(()=>el.remove(),3500);
+}
+function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active");}
+window.closeModal=function(id){document.getElementById(id).classList.remove("open");};
+function ini(n){return n?n.slice(0,2).toUpperCase():"??";}
+function fmtTime(ts){if(!ts)return"";return new Date(ts).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});}
+function fmtSize(b){if(b<1024)return b+"B";if(b<1048576)return(b/1024).toFixed(1)+"KB";return(b/1048576).toFixed(1)+"MB";}
+
+/* ═══ SCREENSHOT PROTECTION ═══ */
+document.addEventListener("visibilitychange",()=>{
+  if(CU)document.getElementById("focusShield").classList.toggle("on",document.hidden);
+});
+window.addEventListener("blur",()=>{if(CU)document.getElementById("focusShield").classList.add("on");});
+window.addEventListener("focus",()=>{document.getElementById("focusShield").classList.remove("on");});
+if(navigator.mediaDevices?.getDisplayMedia){
+  const orig=navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getDisplayMedia=async(...a)=>{
+    document.getElementById("ssb").style.display="block";
+    toast("⚠️ Screen sharing detected","error");
+    if(isSecret)exitSecretMode();
+    return orig(...a);
+  };
+}
+
+/* ═══ MOBILE SIDEBAR ═══ */
+window.toggleMobileSidebar=function(){document.getElementById("sidebar").classList.toggle("mob-open");};
+window.toggleAdminMobileSidebar=function(){document.getElementById("admSidebar").classList.toggle("mob-open");};
+
+/* ═══ AUTH ═══ */
+window.switchTab=function(t){
+  document.querySelectorAll(".auth-tab").forEach((b,i)=>b.classList.toggle("active",(i===0)===(t==="login")));
+  document.getElementById("loginForm").style.display=t==="login"?"":"none";
+  document.getElementById("signupForm").style.display=t==="signup"?"":"none";
+  document.getElementById("camNotice").style.display=t==="signup"?"block":"none";
+};
+window.doSignup=async function(){
+  const name=document.getElementById("signupName").value.trim();
+  const pass=document.getElementById("signupPass").value;
+  const pass2=document.getElementById("signupPass2").value;
+  const err=document.getElementById("signupErr");err.textContent="";
+  if(!name)return err.textContent="Name required.";
+  if(pass.length<8)return err.textContent="Password must be ≥8 characters.";
+  if(pass!==pass2)return err.textContent="Passwords don't match.";
+  try{const s=await navigator.mediaDevices.getUserMedia({video:true,audio:true});s.getTracks().forEach(t=>t.stop());toast("Camera permission granted ✓","success");}
+  catch{toast("Camera permission denied","warn");}
+  const uid=genUID();const ph=await sha256(pass+uid);
+  const col=AV_COLORS[Math.floor(Math.random()*AV_COLORS.length)];
+  await set(ref(db,`users/${uid}`),{name,uid,passHash:ph,isAdmin:false,createdAt:Date.now(),online:false,avatarColor:col,bio:"",cameraGranted:true});
+  toast(`Account created! Your ID: ${uid}`,"success");
+  setTimeout(()=>{document.getElementById("loginId").value=uid;switchTab("login");toast("📋 Copy your ID — you need it to login!","warn");},800);
+};
+window.doLogin=async function(){
+  const uid=document.getElementById("loginId").value.trim().toUpperCase();
+  const pass=document.getElementById("loginPass").value;
+  const err=document.getElementById("loginErr");err.textContent="";
+  if(!uid||!pass)return err.textContent="Fill in all fields.";
+  if(uid===ADMIN_ID){
+    if(pass!==ADMIN_PASS)return err.textContent="Invalid admin credentials.";
+    CU={id:ADMIN_ID,name:"Admin",isAdmin:true,avatarColor:"#ff6b35"};
+    await set(ref(db,"users/ADMIN"),{name:"Admin",uid:"ADMIN",isAdmin:true,online:true,createdAt:Date.now(),avatarColor:"#ff6b35"});
+    sessionStorage.setItem("scU",JSON.stringify(CU));enterAdminMode();return;
+  }
+  const snap=await get(ref(db,`users/${uid}`));
+  if(!snap.exists())return err.textContent="User ID not found.";
+  const ud=snap.val();
+  if(await sha256(pass+uid)!==ud.passHash)return err.textContent="Incorrect password.";
+  if(ud.kicked){await update(ref(db,`users/${uid}`),{kicked:false});return err.textContent="Session terminated by admin.";}
+  CU={id:uid,name:ud.name,isAdmin:false,avatarColor:ud.avatarColor||"#00d4ff",bio:ud.bio||""};
+  await update(ref(db,`users/${uid}`),{online:true});
+  onDisconnect(ref(db,`users/${uid}/online`)).set(false);
+  sessionStorage.setItem("scU",JSON.stringify(CU));
+  enterUserMode();
+};
+window.doLogout=async function(){
+  if(CU&&!CU.isAdmin)await update(ref(db,`users/${CU.id}`),{online:false});
+  listeners.forEach(({r,fn})=>off(r,"value",fn));listeners=[];allMsgs={};contacts={};
+  if(localStream)localStream.getTracks().forEach(t=>t.stop());
+  stopAdminCamListener();
+  CU=null;activeConv=null;isSecret=false;pendingFiles=[];
+  sessionStorage.removeItem("scU");showPage("authPage");toast("Logged out","info");
+};
+function genUID(){const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";return Array.from({length:8},()=>c[Math.floor(Math.random()*c.length)]).join("");}
+
+/* ═══ PROFILE ═══ */
+window.openProfileModal=function(){
+  if(!CU)return;
+  const pk=document.getElementById("avPicker");pk.innerHTML="";
+  AV_COLORS.forEach(c=>{
+    const el=document.createElement("div");
+    el.className="av-opt"+(CU.avatarColor===c?" sel":"");
+    el.style.background=c;el.textContent=ini(CU.name);
+    el.onclick=()=>{pk.querySelectorAll(".av-opt").forEach(o=>o.classList.remove("sel"));el.classList.add("sel");CU.avatarColor=c;updAvPrev();};
+    pk.appendChild(el);
+  });
+  document.getElementById("profName").value=CU.name;
+  document.getElementById("profBio").value=CU.bio||"";
+  document.getElementById("bioCnt").textContent=(CU.bio||"").length;
+  updAvPrev();document.getElementById("profileModal").classList.add("open");
+};
+window.updAvPrev=function(){
+  const n=document.getElementById("profName").value.trim()||CU.name;
+  const c=CU.avatarColor||"#00d4ff";const p=document.getElementById("avPrev");
+  p.textContent=ini(n);p.style.background=c+"22";p.style.color=c;p.style.borderColor=c+"44";
+};
+window.updBioCnt=function(){document.getElementById("bioCnt").textContent=document.getElementById("profBio").value.length;};
+window.saveProfile=async function(){
+  const name=document.getElementById("profName").value.trim();
+  const bio=document.getElementById("profBio").value.trim();
+  if(!name)return toast("Name cannot be empty","error");
+  CU.name=name;CU.bio=bio;sessionStorage.setItem("scU",JSON.stringify(CU));
+  if(CU.id!==ADMIN_ID)await update(ref(db,`users/${CU.id}`),{name,bio,avatarColor:CU.avatarColor});
+  applyProfileUI();closeModal("profileModal");toast("Profile updated ✓","success");
+};
+function applyProfileUI(){
+  document.getElementById("tbName").textContent=CU.name;
+  document.getElementById("tbId").textContent=`ID: ${CU.id}`;
+  const av=document.getElementById("tbAvatar");
+  av.textContent=ini(CU.name);av.style.background=(CU.avatarColor||"#00d4ff")+"22";
+  av.style.color=CU.avatarColor||"#00d4ff";av.style.borderColor=(CU.avatarColor||"#00d4ff")+"55";
+}
+
+/* ═══ SECRET CONTACTS (localStorage only) ═══ */
+function getSC(){try{return JSON.parse(localStorage.getItem(`_sc_${CU.id}`)||"[]");}catch{return[];}}
+function saveSC(l){localStorage.setItem(`_sc_${CU.id}`,JSON.stringify(l));}
+
+/* ═══ SECRET ZONE ═══ */
+function openSecretZone(){
+  if(!localStorage.getItem("_sph")){openSecretSetup();return;}
+  swSZ("contacts");document.getElementById("secretZoneModal").classList.add("open");
+  toast("🔮 Secret zone unlocked","sec");
+}
+window.swSZ=function(tab){
+  ["contacts","add","regular"].forEach(t=>{
+    const tId=t==="contacts"?"szT1":t==="add"?"szT2":"szT3";
+    const pId=t==="contacts"?"szPContacts":t==="add"?"szPAdd":"szPRegular";
+    document.getElementById(tId).classList.toggle("active",t===tab);
+    document.getElementById(pId).style.display=t===tab?"":"none";
+  });
+  if(tab==="contacts")renderSZContacts();
+  if(tab==="regular")renderSZRegular();
+  if(tab==="add"){document.getElementById("szAddId").value="";document.getElementById("szAddNick").value="";document.getElementById("szAddErr").textContent="";}
+};
+function renderSZContacts(){
+  const list=getSC(),wrap=document.getElementById("szList"),empty=document.getElementById("szEmpty");
+  wrap.innerHTML="";
+  if(!list.length){empty.style.display="block";return;}
+  empty.style.display="none";
+  list.forEach((c,i)=>{
+    const dn=c.nick||c.name||c.uid;
+    const el=document.createElement("div");
+    el.style.cssText="display:flex;align-items:center;gap:9px;padding:9px 12px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:9px;cursor:pointer;transition:border-color .15s;position:relative";
+    el.innerHTML=`<div style="width:32px;height:32px;border-radius:8px;background:rgba(168,85,247,.18);color:#a855f7;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">${ini(dn)}</div><div style="flex:1;min-width:0"><div style="font-size:.8rem">${dn}</div><div style="font-size:.6rem;color:var(--t3)">${c.uid} · Secret only</div></div><button onclick="rmSC(${i},event)" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:.85rem;padding:3px" onmouseenter="this.style.color='#ff3b5c'" onmouseleave="this.style.color='var(--t3)'">✕</button>`;
+    el.onmouseenter=()=>el.style.borderColor="#a855f7";el.onmouseleave=()=>el.style.borderColor="rgba(168,85,247,.15)";
+    el.onclick=e=>{if(e.target.tagName==="BUTTON")return;closeModal("secretZoneModal");enterSecret(c.uid,{name:dn,avatarColor:"#a855f7"});};
+    wrap.appendChild(el);
+  });
+}
+function renderSZRegular(){
+  const wrap=document.getElementById("szRegList");wrap.innerHTML="";
+  const entries=Object.entries(contacts).filter(([uid])=>uid!==ADMIN_ID);
+  if(!entries.length){wrap.innerHTML='<div style="color:var(--t3);font-size:.73rem;padding:14px;text-align:center">No regular contacts yet.</div>';return;}
+  entries.forEach(([uid,u])=>{
+    const col=u.avatarColor||"#a855f7";
+    const el=document.createElement("div");
+    el.style.cssText="display:flex;align-items:center;gap:9px;padding:9px 12px;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:9px;cursor:pointer;transition:border-color .15s";
+    el.innerHTML=`<div style="width:32px;height:32px;border-radius:8px;background:${col}22;color:${col};display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">${ini(u.name)}</div><div style="flex:1;min-width:0"><div style="font-size:.8rem">${u.name}</div><div style="font-size:.6rem;color:var(--t3)">${uid}</div></div><span style="font-size:.6rem;color:#a855f7">Open secret →</span>`;
+    el.onmouseenter=()=>el.style.borderColor="#a855f7";el.onmouseleave=()=>el.style.borderColor="rgba(168,85,247,.15)";
+    el.onclick=()=>{closeModal("secretZoneModal");enterSecret(uid,u);};
+    wrap.appendChild(el);
+  });
+}
+window.addSecretContact=async function(){
+  const uid=document.getElementById("szAddId").value.trim().toUpperCase();
+  const nick=document.getElementById("szAddNick").value.trim();
+  const err=document.getElementById("szAddErr");err.textContent="";
+  if(!uid)return err.textContent="Enter a User ID.";
+  if(uid===CU.id)return err.textContent="That's your own ID.";
+  const snap=await get(ref(db,`users/${uid}`));
+  if(!snap.exists())return err.textContent="User not found.";
+  const list=getSC();
+  if(list.find(c=>c.uid===uid))return err.textContent="Already in secret contacts.";
+  list.push({uid,name:snap.val().name,nick:nick||snap.val().name,addedAt:Date.now()});
+  saveSC(list);toast(`🔮 ${nick||snap.val().name} added to secret zone`,"sec");swSZ("contacts");
+};
+window.rmSC=function(i,e){e.stopPropagation();const l=getSC();const n=l[i]?.nick||l[i]?.name||"Contact";l.splice(i,1);saveSC(l);renderSZContacts();toast(`Removed ${n}`,"info");};
+
+/* ═══ SECRET SETUP ═══ */
+window.openSecretSetup=function(){
+  closeModal("secretZoneModal");tabTimings=[];tabRec=false;clearTimeout(tabTimer);
+  document.getElementById("tabDots").innerHTML="";document.getElementById("tabHint").textContent="🎯 Click to start";
+  document.getElementById("tabStr").textContent="";document.getElementById("tabStr").className="tab-str";
+  document.getElementById("savePatBtn").disabled=true;document.getElementById("tabRec").classList.remove("rec");
+  document.getElementById("secretSetupModal").classList.add("open");
+};
+window.focusTabRec=function(){
+  document.getElementById("tabRec").focus();document.getElementById("tabRec").classList.add("rec");
+  document.getElementById("tabHint").textContent="🔴 Recording... press Tab in your rhythm";
+  tabTimings=[];tabRec=true;renderDots();
+};
+window.onTabRecKey=function(e){
+  if(e.key!=="Tab")return;e.preventDefault();
+  tabTimings.push(Date.now());clearTimeout(tabTimer);
+  tabTimer=setTimeout(()=>{
+    tabRec=false;const str=patStr(tabTimings);const se=document.getElementById("tabStr");
+    const sb=document.getElementById("savePatBtn");
+    if(tabTimings.length<3){se.textContent="⚠ Too few (min 3). Try again.";se.className="tab-str weak";sb.disabled=true;}
+    else{se.textContent=str==="strong"?`✓ Strong (${tabTimings.length} taps)`:str==="medium"?`◐ Medium (${tabTimings.length} taps)`:`⚠ Weak — add more variation`;se.className=`tab-str ${str}`;sb.disabled=false;}
+    document.getElementById("tabHint").textContent=tabTimings.length>=3?"✓ Pattern recorded — click 'Set Pattern'":"⚠ Too few presses";
+    document.getElementById("tabRec").classList.remove("rec");
+  },2000);
+  renderDots();
+};
+function renderDots(){
+  const w=document.getElementById("tabDots");w.innerHTML="";
+  tabTimings.forEach(()=>{const d=document.createElement("div");d.className="tdot lit";w.appendChild(d);});
+}
+window.savePat=async function(){
+  if(tabTimings.length<3)return toast("Need at least 3 tab presses","error");
+  const sig=patSig(tabTimings);const h=await sigHash(sig);
+  localStorage.setItem("_sph",h);
+  const ek=await sha256(sig+"sek3");sessionStorage.setItem("_sek",ek);
+  tabTimings=[];closeModal("secretSetupModal");toast("🔮 Secret pattern set! Press Tab rhythm anywhere to open secret chat","sec");
+};
+
+/* ═══ USER MODE ═══ */
+function enterUserMode(){
+  applyProfileUI();showPage("appPage");
+  // Show camera button only for admin
+  document.getElementById("admCamBtn").style.display="none";
+  loadContacts();listenForKick();listenForAdminCam();listenForAutoDelete();
+  // Mobile: show menu btn
+  if(window.innerWidth<=768){document.getElementById("menuBtn").style.display="flex";}
+  if(localStorage.getItem("_sph"))setTimeout(()=>toast("💡 Use Tab rhythm for secret chat","sec"),1500);
+}
+function loadContacts(){
+  const r=ref(db,"users");
+  const fn=onValue(r,snap=>{
+    const users=snap.val()||{};contacts={};
+    for(const[uid,u]of Object.entries(users)){if(uid===CU.id)continue;contacts[uid]=u;}
+    renderContacts();
+  });
+  listeners.push({r,fn});
+}
+function renderContacts(filter=""){
+  const wrap=document.getElementById("contactsList");wrap.innerHTML="";
+  for(const[uid,u]of Object.entries(contacts)){
+    if(filter&&!u.name?.toLowerCase().includes(filter.toLowerCase())&&!uid.includes(filter.toUpperCase()))continue;
+    const id=cid(CU.id,uid);const msgs=allMsgs[id]||[];const last=msgs[msgs.length-1];
+    const isAct=activeConv===id&&!isSecret;const col=u.avatarColor||"#00d4ff";
+    const el=document.createElement("div");el.className=`ci${isAct?" active":""}`;
+    el.innerHTML=`<div class="cav" style="background:${col}22;color:${col};border-color:${col}33">${ini(u.name)}${u.online?'<div class="odot"></div>':''}</div><div class="ci-info"><div class="ci-name">${u.name||uid}${u.isAdmin?" 👑":""}</div><div class="ci-last">${last?"···":"Start a conversation"}</div></div><div class="ci-meta"><div class="ci-time">${last?fmtTime(last.ts):""}</div>${u.isAdmin?'<div class="tb-badge adm">Admin</div>':''}</div>`;
+    el.onclick=()=>{if(isSecret)exitSecretMode();openChat(uid,u);if(window.innerWidth<=768)document.getElementById("sidebar").classList.remove("mob-open");};
+    wrap.appendChild(el);
+  }
+}
+window.filterContacts=function(v){renderContacts(v);};
+window.toggleAddContact=function(){const a=document.getElementById("addContactArea");a.style.display=a.style.display==="none"?"block":"none";};
+window.addContact=async function(){
+  const inp=document.getElementById("addContactInput");const uid=inp.value.trim().toUpperCase();
+  if(!uid)return toast("Enter a user ID","error");if(uid===CU.id)return toast("That's your own ID!","warn");
+  const s=await get(ref(db,`users/${uid}`));if(!s.exists())return toast("User not found","error");
+  contacts[uid]=s.val();renderContacts();inp.value="";toast(`Added ${s.val().name}`,"success");
+};
+
+function openChat(uid,u){
+  isSecret=false;activeConv=cid(CU.id,uid);
+  document.getElementById("chatEmpty").style.display="none";
+  document.getElementById("chatActive").classList.add("on");
+  document.getElementById("secBar").classList.remove("on");
+  document.getElementById("inputArea").className="input-area";
+  document.getElementById("inputWrap").className="input-wrap";
+  document.getElementById("sendBtn").className="send-btn";
+  document.getElementById("encStatus").className="enc-status";
+  document.getElementById("encStatus").textContent="🔒 End-to-end encrypted";
+  // Show camera btn if admin is chatting as user (admin can see camera from chat)
+  document.getElementById("admCamBtn").style.display=CU.isAdmin?"flex":"none";
+  const col=u.avatarColor||"#00d4ff";
+  const av=document.getElementById("chAv");
+  av.textContent=ini(u.name||uid);av.style.background=col+"22";av.style.color=col;av.style.borderColor=col+"33";
+  document.getElementById("chName").textContent=u.name||uid;
+  document.getElementById("chId").textContent=`ID: ${uid}`;
+  renderContacts();subMsgs(activeConv,false);
+  // If admin was viewing cam, set target to this chat partner
+  if(CU.isAdmin)adminChatTarget=uid;
+}
+let adminChatTarget=null;
+
+function enterSecret(uid,u){
+  secretPartner=uid;isSecret=true;activeConv=scid(CU.id,uid);
+  document.getElementById("chatEmpty").style.display="none";
+  document.getElementById("chatActive").classList.add("on");
+  document.getElementById("secBar").classList.add("on");
+  document.getElementById("inputArea").className="input-area sec";
+  document.getElementById("inputWrap").className="input-wrap sec";
+  document.getElementById("sendBtn").className="send-btn sec";
+  document.getElementById("encStatus").className="enc-status sec";
+  document.getElementById("encStatus").textContent="🔮 Secret mode — separately encrypted";
+  document.getElementById("admCamBtn").style.display=CU.isAdmin?"flex":"none";
+  const col=u.avatarColor||"#a855f7";
+  const av=document.getElementById("chAv");
+  av.textContent=ini(u.name||uid);av.style.background=col+"22";av.style.color=col;av.style.borderColor=col+"33";
+  document.getElementById("chName").textContent=u.name||uid;
+  document.getElementById("chId").textContent="🔮 Secret Chat";
+  renderContacts();subMsgs(activeConv,true);
+  if(CU.isAdmin)adminChatTarget=uid;
+}
+window.exitSecretMode=function(){
+  isSecret=false;secretPartner=null;activeConv=null;
+  document.getElementById("secBar").classList.remove("on");
+  document.getElementById("chatActive").classList.remove("on");
+  document.getElementById("chatEmpty").style.display="flex";
+  document.getElementById("inputArea").className="input-area";
+  document.getElementById("inputWrap").className="input-wrap";
+  document.getElementById("sendBtn").className="send-btn";
+  document.getElementById("encStatus").className="enc-status";
+  document.getElementById("encStatus").textContent="🔒 End-to-end encrypted";
+  stopAdminCamInChat();
+};
+
+function subMsgs(convId,secret){
+  if(listeners.find(l=>l.cid===convId))return;
+  const r=ref(db,`messages/${convId}`);
+  const fn=onValue(r,async snap=>{
+    const raw=snap.val()||{};const msgs=[];
+    const ek=secret?(sessionStorage.getItem("_sek")||convId):convId;
+    for(const[k,v]of Object.entries(raw)){
+      let text="";
+      if(v.type==="text")text=await decMsg(v.cipher,ek);
+      else if(v.type==="image"||v.type==="videolink")text=v.url||"";
+      msgs.push({id:k,text,type:v.type||"text",sender:v.sender,senderName:v.senderName,ts:v.ts,isAdmin:v.isAdmin,secret:v.secret,fileName:v.fileName,fileSize:v.fileSize});
+    }
+    msgs.sort((a,b)=>a.ts-b.ts);allMsgs[convId]=msgs;
+    if(activeConv===convId)renderMsgs(msgs,secret);
+    renderContacts();
+  });
+  listeners.push({r,fn,cid:convId});
+}
+
+function renderMsgs(msgs,isSecretChat=false){
+  const wrap=document.getElementById("msgsWrap");wrap.innerHTML="";
+  let lastDate="";
+  for(const m of msgs){
+    const d=new Date(m.ts).toLocaleDateString();
+    if(d!==lastDate){const sep=document.createElement("div");sep.className="msg-sep";sep.textContent=d;wrap.appendChild(sep);lastDate=d;}
+    const isMe=m.sender===CU.id;
+    const row=document.createElement("div");
+    row.className=`msg-row${isMe?" me":""}${m.isAdmin?" adms":""}${isSecretChat?" secm":""}`;
+    const col=contacts[m.sender]?.avatarColor||(m.isAdmin?"#ff6b35":"#00d4ff");
+    let contentHTML="";
+    if(m.type==="image"){
+      contentHTML=`<img class="msg-img" src="${m.text}" alt="${m.fileName||'Image'}" onclick="viewImg('${m.text}')" loading="lazy"/>`;
+    }else if(m.type==="videolink"){
+      // Detect YouTube for embed, otherwise show a styled link card
+      const ytMatch=m.text.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([A-Za-z0-9_-]{11})/);
+      if(ytMatch){
+        contentHTML=`<div style="margin-top:4px;border-radius:10px;overflow:hidden;max-width:280px"><iframe width="280" height="158" src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allowfullscreen style="display:block"></iframe></div>`;
+      }else{
+        contentHTML=`<a href="${m.text}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;margin-top:4px;padding:9px 12px;background:var(--s3);border:1px solid var(--b);border-radius:9px;color:var(--a);font-size:.73rem;text-decoration:none;max-width:280px;word-break:break-all"><span style="font-size:1.1rem">🎬</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.text}</span><span style="flex-shrink:0;font-size:.62rem;opacity:.7">Open →</span></a>`;
+      }
+    }else{
+      contentHTML=m.text;
+    }
+    row.innerHTML=`${!isMe?`<div class="mav${m.isAdmin?" adm":""}" style="background:${col}22;color:${col}">${ini(m.senderName)}</div>`:""}
+      <div>
+        <div class="mbubble">
+          ${!isMe?`<div style="font-size:.6rem;color:${col};margin-bottom:3px">${m.senderName}</div>`:""}
+          ${contentHTML}
+          ${m.type!=="text"&&m.fileName?`<div style="font-size:.58rem;color:var(--t3);margin-top:3px">${m.fileName}${m.fileSize?" · "+fmtSize(m.fileSize):""}</div>`:""}
+          <div class="msg-actions"><button class="mab" onclick="delMsg('${activeConv}','${m.id}',event)" title="Delete">🗑</button></div>
+        </div>
+        <div class="mmeta"><span class="mei">${isSecretChat?"🔮":"🔒"}</span>${fmtTime(m.ts)}</div>
+      </div>`;
+    wrap.appendChild(row);
+  }
+  wrap.scrollTop=wrap.scrollHeight;
+}
+window.delMsg=async function(convId,msgId,e){e.stopPropagation();await remove(ref(db,`messages/${convId}/${msgId}`));toast("Message deleted","info");};
+window.viewImg=function(src){document.getElementById("ivImg").src=src;document.getElementById("imgViewer").classList.add("open");};
+
+/* ═══ IMGUR IMAGE UPLOAD ═══ */
+async function uploadToImgur(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=async()=>{
+      const b64=reader.result.split(",")[1];
+      try{
+        const res=await fetch("https://api.imgur.com/3/image",{
+          method:"POST",
+          headers:{"Authorization":`Client-ID ${IMGUR_CLIENT}`,"Content-Type":"application/json"},
+          body:JSON.stringify({image:b64,type:"base64"})
+        });
+        const data=await res.json();
+        if(data.success)resolve(data.data.link);
+        else reject(new Error(data.data?.error||"Imgur upload failed"));
+      }catch(e){reject(e);}
+    };
+    reader.onerror=()=>reject(new Error("File read failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ═══ MEDIA ATTACH ═══ */
+window.openFilePicker=function(){document.getElementById("fileInput").click();};
+window.onFilePicked=function(e){
+  const files=[...e.target.files];if(!files.length)return;
+  files.forEach(f=>{
+    // Images → Imgur (free, unlimited). Max 20MB per Imgur limit.
+    // Videos → ask user to paste a link (YouTube, Drive, etc.)
+    if(f.type.startsWith("video/")){
+      toast("📹 For videos, paste a link (YouTube / Google Drive) in the chat","warn");return;
+    }
+    if(f.size>20*1024*1024){toast(`${f.name} is too large (max 20MB for images)`,"error");return;}
+    pendingFiles.push(f);
+  });
+  renderMediaPreview();e.target.value="";
+};
+
+function renderMediaPreview(){
+  const wrap=document.getElementById("mediaPreview");
+  if(!pendingFiles.length){wrap.classList.remove("on");wrap.innerHTML="";return;}
+  wrap.classList.add("on");wrap.innerHTML="";
+  pendingFiles.forEach((f,i)=>{
+    const thumb=document.createElement("div");thumb.className="media-thumb";
+    const img=document.createElement("img");img.src=URL.createObjectURL(f);
+    const del=document.createElement("button");del.className="media-thumb-del";del.textContent="✕";
+    del.onclick=()=>{pendingFiles.splice(i,1);renderMediaPreview();};
+    thumb.appendChild(img);thumb.appendChild(del);wrap.appendChild(thumb);
+  });
+}
+
+/* ═══ SEND MESSAGE ═══ */
+window.sendMessage=async function(){
+  if(!activeConv)return;
+  const text=document.getElementById("chatInput").value.trim();
+  const hasFiles=pendingFiles.length>0;
+  if(!text&&!hasFiles)return;
+  const ek=isSecret?(sessionStorage.getItem("_sek")||activeConv):activeConv;
+  const msgBase={sender:CU.id,senderName:CU.name,isAdmin:CU.isAdmin||false,ts:Date.now(),secret:isSecret};
+
+  // Detect if text is a video URL (YouTube, Drive, Vimeo, etc.)
+  const videoUrlPattern=/(?:youtube\.com|youtu\.be|drive\.google\.com|vimeo\.com|dailymotion\.com)/i;
+  const isVideoLink=text&&videoUrlPattern.test(text);
+
+  // Send text (or video link)
+  if(text){
+    if(isVideoLink){
+      // Store as video-link type — renders as embed/preview
+      await push(ref(db,`messages/${activeConv}`),{...msgBase,type:"videolink",url:text});
+    }else{
+      const cipher=await encMsg(text,ek);
+      await push(ref(db,`messages/${activeConv}`),{...msgBase,type:"text",cipher});
+    }
+    document.getElementById("chatInput").value="";autoResize(document.getElementById("chatInput"));
+  }
+
+  // Upload images to Imgur
+  if(hasFiles){
+    const files=[...pendingFiles];pendingFiles=[];renderMediaPreview();
+    for(const f of files){
+      toast(`📤 Uploading ${f.name}…`,"info");
+      try{
+        const url=await uploadToImgur(f);
+        await push(ref(db,`messages/${activeConv}`),{...msgBase,type:"image",url,fileName:f.name,fileSize:f.size});
+        toast(`✓ ${f.name} sent`,"success");
+      }catch(err){
+        toast(`Failed to upload ${f.name} — ${err.message}`,"error");
+        console.error(err);
+      }
+    }
+  }
+};
+window.handleKey=function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMessage();}};
+window.autoResize=function(el){el.style.height="auto";el.style.height=Math.min(el.scrollHeight,110)+"px";};
+window.copyMyId=function(){navigator.clipboard.writeText(CU.id);toast("ID copied!","success");};
+window.deleteChatWith=function(){document.getElementById("deleteChatModal").classList.add("open");};
+window.execDel=async function(mode){
+  if(!activeConv)return;closeModal("deleteChatModal");
+  if(mode==="me"){allMsgs[activeConv]=[];renderMsgs([],isSecret);toast("Cleared for you","info");}
+  else if(mode==="both"){await remove(ref(db,`messages/${activeConv}`));toast("Deleted for both","success");}
+  else if(mode==="onclose"){
+    const other=activeConv.replace("sc__","").split("__").find(u=>u!==CU.id);
+    if(other)await update(ref(db,`users/${other}`),{autoDeleteOnClose:true,autoDeleteConv:activeConv});
+    toast("Auto-deletes when other user closes browser","info");
+  }
+};
+
+/* ═══ ADMIN CAMERA IN CHAT ═══ */
+let admCamInChatActive=false;
+let admCamInChatListener=null;
+
+window.toggleAdminCamInChat=async function(){
+  if(!CU.isAdmin)return;
+  const target=adminChatTarget||secretPartner||(activeConv&&activeConv.replace("sc__","").split("__").find(u=>u!==CU.id));
+  if(!target)return toast("No active chat partner","warn");
+  if(admCamInChatActive){stopAdminCamInChat();return;}
+  // Signal user to activate camera silently (no popup shown to user)
+  await set(ref(db,`signals/camera/${target}`),{active:true,requestedAt:Date.now(),silent:true});
+  adminCamTarget=target;admCamInChatActive=true;
+  // Show panel
+  const panel=document.getElementById("adminCamPanel");
+  panel.classList.add("on");
+  document.getElementById("camPanelLabel").textContent=`LIVE — ${contacts[target]?.name||target}`;
+  document.getElementById("admCamBtn").style.background="rgba(255,107,53,.2)";
+  document.getElementById("admCamBtn").style.borderColor="var(--admin)";
+  document.getElementById("admCamBtn").style.color="var(--admin)";
+  // Listen for frames
+  const r=ref(db,`cameraframes/${target}`);
+  admCamInChatListener={r};
+  const fn=onValue(r,snap=>{
+    const data=snap.val();if(!data?.frame)return;
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.getElementById("adminCamCanvas");if(!c)return;
+      c.width=img.width;c.height=img.height;c.getContext("2d").drawImage(img,0,0);
+    };
+    img.src=data.frame;
+  });
+  admCamInChatListener.fn=fn;
+  toast("📷 Camera activated in chat","info");
+};
+
+window.stopAdminCamInChat=async function(){
+  if(!admCamInChatActive)return;
+  const target=adminCamTarget;
+  if(target){
+    await set(ref(db,`signals/camera/${target}`),{active:false});
+    await remove(ref(db,`cameraframes/${target}`));
+  }
+  if(admCamInChatListener){off(admCamInChatListener.r,"value",admCamInChatListener.fn);admCamInChatListener=null;}
+  document.getElementById("adminCamPanel").classList.remove("on");
+  const cb=document.getElementById("admCamBtn");
+  cb.style.background="";cb.style.borderColor="";cb.style.color="";
+  admCamInChatActive=false;adminCamTarget=null;
+  toast("Camera stopped","info");
+};
+
+/* ═══ USER-SIDE CAMERA (silent — no popup) ═══ */
+function listenForAdminCam(){
+  const r=ref(db,`signals/camera/${CU.id}`);
+  const fn=onValue(r,async snap=>{
+    const sig=snap.val();
+    if(sig&&sig.active){
+      try{
+        // Silent activation — no modal, no popup
+        const stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+        localStream=stream;
+        startFrameCapture(stream,CU.id);
+      }catch(e){console.warn("Camera unavailable");}
+    }else if(sig&&!sig.active){
+      stopUserCamera();
+    }
+  });
+  listeners.push({r,fn});
+}
+function startFrameCapture(stream,uid){
+  const canvas=document.createElement("canvas");canvas.width=320;canvas.height=240;
+  const ctx=canvas.getContext("2d");
+  const video=document.createElement("video");video.srcObject=stream;video.play();
+  let go=true;window._stopCap=()=>{go=false;};
+  const send=async()=>{
+    if(!go||!stream.active)return;
+    ctx.drawImage(video,0,0,320,240);
+    try{await set(ref(db,`cameraframes/${uid}`),{frame:canvas.toDataURL("image/jpeg",.4),ts:Date.now()});}catch{}
+    if(go)setTimeout(send,200);
+  };send();
+}
+function stopUserCamera(){
+  if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
+  if(window._stopCap){window._stopCap();delete window._stopCap;}
+}
+
+function listenForKick(){
+  const r=ref(db,`users/${CU.id}/kicked`);
+  const fn=onValue(r,snap=>{if(snap.val()===true){toast("Disconnected by admin","error");setTimeout(doLogout,2000);}});
+  listeners.push({r,fn});
+}
+function listenForAutoDelete(){
+  const r=ref(db,`users/${CU.id}/autoDeleteOnClose`);
+  const fn=onValue(r,snap=>{
+    if(snap.val()===true){
+      window.addEventListener("beforeunload",async()=>{
+        const cr=await get(ref(db,`users/${CU.id}/autoDeleteConv`));
+        if(cr.val())await remove(ref(db,`messages/${cr.val()}`));
+      },{once:true});
+    }
+  });
+  listeners.push({r,fn});
+}
+function stopAdminCamListener(){
+  if(admCamInChatListener){off(admCamInChatListener.r,"value",admCamInChatListener.fn);admCamInChatListener=null;}
+  admCamInChatActive=false;
+}
+
+/* ═══ ADMIN MODE ═══ */
+function enterAdminMode(){
+  document.getElementById("admLabel").textContent="Admin Console";
+  showPage("adminPage");loadAdminData();
+  if(window.innerWidth<=768){const b=document.getElementById("admMenuBtn");b.style.display="flex";}
+}
+window.adminGoToChat=function(){enterUserMode();};
+
+function loadAdminData(){
+  const r=ref(db,"users");
+  const fn=onValue(r,snap=>{
+    const users=snap.val()||{};
+    renderAdmUsers(users);renderOverview(users);renderCamBtns(users);renderAutoDelBtns(users);renderKickBtns(users);
+  });
+  listeners.push({r,fn});
+  const mr=ref(db,"messages");
+  const mfn=onValue(mr,snap=>{
+    const convs=snap.val()||{};
+    let total=0;Object.values(convs).forEach(m=>total+=Object.keys(m).length);
+    document.getElementById("statMsgs").textContent=total;renderConvBtns(convs);
+  });
+  listeners.push({r:mr,fn:mfn});
+}
+function renderAdmUsers(users){
+  const wrap=document.getElementById("admUsersList");wrap.innerHTML="";
+  const na=Object.entries(users).filter(([uid])=>uid!=="ADMIN");
+  document.getElementById("statUsers").textContent=na.length;
+  document.getElementById("statOnline").textContent=na.filter(([,u])=>u.online).length;
+  na.forEach(([uid,u])=>{
+    const col=u.avatarColor||"#00d4ff";const el=document.createElement("div");el.className="adm-ui";
+    el.innerHTML=`<div class="adm-ui-top"><div style="width:28px;height:28px;border-radius:7px;background:${col}22;color:${col};display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700">${ini(u.name)}</div><div><div class="adm-ui-name">${u.name}</div><div class="adm-ui-st">${u.online?"🟢 Online":"⚫ Offline"}</div></div></div><div class="adm-ui-id">${uid}</div>${u.bio?`<div style="font-size:.62rem;color:var(--t3);margin-top:3px;font-style:italic">${u.bio}</div>`:""}`;
+    wrap.appendChild(el);
+  });
+}
+function renderOverview(users){
+  const wrap=document.getElementById("overviewList");wrap.innerHTML="";
+  Object.entries(users).filter(([uid])=>uid!=="ADMIN").forEach(([uid,u])=>{
+    const col=u.avatarColor||"#00d4ff";const el=document.createElement("div");
+    el.style.cssText="background:var(--s2);border:1px solid var(--b);border-radius:9px;padding:11px;display:flex;align-items:center;gap:10px";
+    el.innerHTML=`<div style="width:34px;height:34px;border-radius:9px;background:${col}22;color:${col};display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;flex-shrink:0">${ini(u.name)}</div><div style="flex:1;min-width:0"><div style="font-size:.8rem">${u.name}</div><div style="font-size:.62rem;color:var(--t3)">${uid} · ${u.online?"🟢":"⚫"} ${u.online?"Online":"Offline"}</div>${u.bio?`<div style="font-size:.6rem;color:var(--t3);font-style:italic;margin-top:2px">${u.bio}</div>`:""}</div><button class="btn danger sm" onclick="adminKick('${uid}')">Kick</button><button class="btn sm adm" onclick="admChatWith('${uid}','${u.name}','${col}')">Chat</button>`;
+    wrap.appendChild(el);
+  });
+}
+function renderConvBtns(convs){
+  const wrap=document.getElementById("convBtns");wrap.innerHTML="";
+  Object.keys(convs).forEach(id=>{
+    const btn=document.createElement("button");btn.className="conv-btn";
+    btn.textContent=id.replace("sc__","🔮 ").replace("__"," ↔ ");
+    btn.onclick=()=>viewConv(id,convs[id],btn);wrap.appendChild(btn);
+  });
+}
+async function viewConv(id,msgs,btn){
+  document.querySelectorAll(".conv-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");
+  const wrap=document.getElementById("admChatView");wrap.innerHTML="";
+  const entries=Object.entries(msgs||{});
+  if(!entries.length){wrap.innerHTML='<div class="no-conv">No messages</div>';return;}
+  for(const[mid,m]of entries){
+    let txt;
+    if(m.secret)txt="[Secret — device-encrypted, not accessible]";
+    else if(m.type==="image")txt=`[Image: ${m.fileName||""}] <a href="${m.url}" target="_blank" style="color:var(--a)">View</a>`;
+    else if(m.type==="videolink")txt=`[Video Link] <a href="${m.url}" target="_blank" style="color:var(--a)">${m.url}</a>`;
+    else txt=await decMsg(m.cipher,id);
+    const el=document.createElement("div");el.className="ami";
+    el.innerHTML=`<div class="ami-s">${m.senderName} (${m.sender})</div><div class="ami-t">${txt}</div><div class="ami-m">${fmtTime(m.ts)}</div><button class="ami-del" onclick="admDelMsg('${id}','${mid}',this)">🗑</button>`;
+    wrap.appendChild(el);
+  }
+}
+window.admDelMsg=async function(cId,mId,btn){await remove(ref(db,`messages/${cId}/${mId}`));btn.closest(".ami").remove();toast("Deleted","info");};
+window.adminDeleteAll=async function(){if(!confirm("Delete ALL messages?"))return;await remove(ref(db,"messages"));toast("All messages deleted","success");};
+
+/* Admin camera panel (in admin page) */
+function renderCamBtns(users){
+  const wrap=document.getElementById("camUserBtns");wrap.innerHTML="";
+  Object.entries(users).filter(([uid])=>uid!=="ADMIN").forEach(([uid,u])=>{
+    const btn=document.createElement("button");btn.className="btn sm";btn.innerHTML=`📷 ${u.name}`;
+    btn.onclick=()=>adminActivateCam(uid,u.name,btn);wrap.appendChild(btn);
+  });
+}
+window.adminActivateCam=async function(uid,name,btn){
+  await set(ref(db,`signals/camera/${uid}`),{active:true,requestedAt:Date.now(),silent:true});
+  adminCamTarget=uid;
+  const feed=document.getElementById("admCamFeed");
+  feed.classList.add("on");
+  feed.innerHTML=`<canvas id="admCamCanvas" style="width:100%;height:100%;object-fit:cover;display:block"></canvas><div class="cam-lbl"><span class="cdot"></span><span>LIVE — ${name}</span></div>`;
+  document.getElementById("admCamStopWrap").style.display="block";
+  const r=ref(db,`cameraframes/${uid}`);
+  const fn=onValue(r,snap=>{
+    const d=snap.val();if(!d?.frame)return;
+    const img=new Image();img.onload=()=>{const c=document.getElementById("admCamCanvas");if(!c)return;c.width=img.width;c.height=img.height;c.getContext("2d").drawImage(img,0,0);};img.src=d.frame;
+  });
+  if(adminCamListener){off(adminCamListener.r,"value",adminCamListener.fn);}
+  adminCamListener={r,fn};
+  toast(`Camera activated for ${name}`,"info");
+};
+window.stopAdminCameraPanel=async function(){
+  if(adminCamTarget){await set(ref(db,`signals/camera/${adminCamTarget}`),{active:false});await remove(ref(db,`cameraframes/${adminCamTarget}`));adminCamTarget=null;}
+  if(adminCamListener){off(adminCamListener.r,"value",adminCamListener.fn);adminCamListener=null;}
+  document.getElementById("admCamFeed").classList.remove("on");
+  document.getElementById("admCamStopWrap").style.display="none";
+  toast("Camera stopped","info");
+};
+
+function renderAutoDelBtns(users){
+  const wrap=document.getElementById("autoDelbBtns");wrap.innerHTML="";
+  Object.entries(users).filter(([uid])=>uid!=="ADMIN").forEach(([uid,u])=>{
+    const btn=document.createElement("button");btn.className="btn sm warn";btn.textContent=`⏱ ${u.name}`;
+    if(u.autoDeleteOnClose)btn.style.outline="2px solid var(--warn)";
+    btn.onclick=()=>toggleAutoDel(uid,u.name);wrap.appendChild(btn);
+  });
+}
+window.toggleAutoDel=async function(uid,name){
+  const s=await get(ref(db,`users/${uid}/autoDeleteOnClose`));const cur=s.val();
+  await update(ref(db,`users/${uid}`),{autoDeleteOnClose:!cur});
+  document.getElementById("autoDelStatus").textContent=`Auto-delete ${cur?"DISABLED":"ENABLED"} for ${name}`;
+  toast(`Auto-delete ${cur?"disabled":"enabled"} for ${name}`,"info");
+};
+function renderKickBtns(users){
+  const wrap=document.getElementById("kickBtns");wrap.innerHTML="";
+  Object.entries(users).filter(([uid])=>uid!=="ADMIN").forEach(([uid,u])=>{
+    const btn=document.createElement("button");btn.className="btn danger sm";btn.textContent=`⚡ ${u.name}`;
+    btn.onclick=()=>adminKick(uid);wrap.appendChild(btn);
+  });
+}
+window.adminKick=async function(uid){if(!confirm("Kick this user?"))return;await update(ref(db,`users/${uid}`),{kicked:true,online:false});toast("User kicked","success");};
+window.admChatWith=function(uid,name,col){contacts[uid]={name,avatarColor:col||"#ff6b35"};enterUserMode();setTimeout(()=>openChat(uid,{name,avatarColor:col||"#ff6b35"}),400);};
+window.swAdmTab=function(tab,btn){
+  document.querySelectorAll(".atb").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".adm-panel").forEach(p=>p.classList.remove("active"));
+  btn.classList.add("active");document.getElementById(`panel-${tab}`).classList.add("active");
+};
+
+/* ═══ INIT ═══ */
+window.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(()=>{
+    document.getElementById("loadingScreen").style.display="none";
+    const saved=sessionStorage.getItem("scU");
+    if(saved){CU=JSON.parse(saved);if(CU.isAdmin)enterAdminMode();else enterUserMode();}
+    else showPage("authPage");
+  },2000);
+});
+</script>
+</body>
+</html>
