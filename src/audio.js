@@ -1,9 +1,18 @@
 // Secure/Subtle Notification Tones using Web Audio API
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let _audioCtx = null;
+function getAudioCtx() {
+  if (typeof window === "undefined") return null;
+  if (!_audioCtx) {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return _audioCtx;
+}
 
 export function playNotificationTone(toneName) {
-  if (!toneName || toneName === "none" || audioCtx.state === "suspended") return;
+  const audioCtx = getAudioCtx();
+  if (!audioCtx) return;
+  if (!toneName || toneName === "none") return;
   
   // Resume context if needed (browsers require user interaction first, 
   // which will happen when they select a tone or interact with the app)

@@ -5,7 +5,7 @@ import Chat from "./components/Chat";
 import SettingsModal from "./components/SettingsModal";
 import { auth, db } from "./firebase";
 import { signOut } from "firebase/auth";
-import { ref, onValue, off, update, get, set } from "firebase/database";
+import { ref, onValue, off, update, get } from "firebase/database";
 import { decryptPrivateKey, deriveKeyFromPassword } from "./crypto";
 import { playNotificationTone } from "./audio";
 
