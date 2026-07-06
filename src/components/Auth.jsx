@@ -57,23 +57,44 @@ export default function Auth({ onLogin }) {
       if (mode === "login") {
         if (!id || !password) throw new Error("Please enter your User ID and password or PIN.");
         const cleanId = id.trim().toLowerCase();
-        
-        const userRef = ref(db, `users/${cleanId}`);
-        const snap = await get(userRef);
-        if (!snap.exists()) throw new Error("User not found. Check your User ID.");
-
-        const userData = snap.val();
-        
-        // Check if the user entered the Duress PIN
-        if (userData.duressPin && password === userData.duressPin) {
-          onLogin(userData, password, true);
-          return;
-        }
-
         const email = `${cleanId}@securechat.local`;
-        await signInWithEmailAndPassword(auth, email, password);
-        await update(userRef, { online: true });
-        onLogin(userData, password, false);
+
+        try {
+          // 1. Try standard email/password authentication first
+          await signInWithEmailAndPassword(auth, email, password);
+
+          // 2. Fetch user profile now that auth is not null
+          const userRef = ref(db, `users/${cleanId}`);
+          const snap = await get(userRef);
+          if (!snap.exists()) throw new Error("User data not found in database.");
+
+          const userData = snap.val();
+          await update(userRef, { online: true });
+          onLogin(userData, password, false);
+        } catch (err) {
+          // Check if it's a Duress PIN login attempt
+          if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
+            try {
+              const { signInAnonymously } = await import("firebase/auth");
+              await signInAnonymously(auth);
+
+              const userRef = ref(db, `users/${cleanId}`);
+              const snap = await get(userRef);
+              if (snap.exists()) {
+                const userData = snap.val();
+                if (userData.duressPin && password === userData.duressPin) {
+                  onLogin(userData, password, true);
+                  return;
+                }
+              }
+              // Sign out if it's not a valid duress PIN
+              await signOut(auth);
+            } catch (anonErr) {
+              console.error("Anonymous check failed:", anonErr);
+            }
+          }
+          throw err;
+        }
       }
 
       // ── REGISTER ───────────────────────────────────────────────────────────
