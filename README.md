@@ -70,7 +70,7 @@ To secure your deployment, apply the following security rules in your Firebase C
     "users": {
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && (auth.token.email == ($uid + '@securechat.local') || root.child('users').child(auth.uid).child('isAdmin').val() == true)"
+        ".write": "auth != null && (auth.token.email == ($uid + '@securechat.local') || root.child('users').child(auth.token.email.replace('@securechat.local', '')).child('isAdmin').val() == true)"
       }
     },
     "messages": {

@@ -55,18 +55,25 @@ export default function Auth({ onLogin }) {
     try {
       // ── LOGIN ──────────────────────────────────────────────────────────────
       if (mode === "login") {
-        if (!id || !password) throw new Error("Please enter your User ID and password.");
+        if (!id || !password) throw new Error("Please enter your User ID and password or PIN.");
         const cleanId = id.trim().toLowerCase();
-        const email = `${cleanId}@securechat.local`;
-        await signInWithEmailAndPassword(auth, email, password);
-
+        
         const userRef = ref(db, `users/${cleanId}`);
         const snap = await get(userRef);
         if (!snap.exists()) throw new Error("User not found. Check your User ID.");
 
         const userData = snap.val();
+        
+        // Check if the user entered the Duress PIN
+        if (userData.duressPin && password === userData.duressPin) {
+          onLogin(userData, password, true);
+          return;
+        }
+
+        const email = `${cleanId}@securechat.local`;
+        await signInWithEmailAndPassword(auth, email, password);
         await update(userRef, { online: true });
-        onLogin(userData, password);
+        onLogin(userData, password, false);
       }
 
       // ── REGISTER ───────────────────────────────────────────────────────────
@@ -252,14 +259,14 @@ export default function Auth({ onLogin }) {
 
           {/* Password — all modes, with eye show/hide option */}
           <div>
-            <label className="block text-xs text-t2 mb-1.5 ml-1">Password</label>
+            <label className="block text-xs text-t2 mb-1.5 ml-1">{mode === "login" ? "Password or PIN" : "Password"}</label>
             <div className="relative flex items-center">
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full bg-s1 border border-b rounded-xl pl-4 pr-11 py-3 text-text text-sm focus:outline-none focus:border-a transition-all"
-                placeholder={mode === "login" ? "Your password" : "Min. 8 characters"}
+                placeholder={mode === "login" ? "Your password or PIN" : "Min. 8 characters"}
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
               />
               <button

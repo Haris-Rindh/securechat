@@ -3,7 +3,7 @@ import { ref, onValue, off, set, remove } from "firebase/database";
 import { db } from "../firebase";
 import { Camera, CameraOff, X, ShieldAlert, Minimize2, Maximize2, Power, Trash2 } from "lucide-react";
 
-export default function AdminMonitor({ user, contacts, onClose }) {
+export default function AdminMonitor({ user, contacts, onClose, showToast, showConfirm }) {
   const [activeMonitor, setActiveMonitor] = useState(null);
   const [frame, setFrame] = useState(null);
   const [frameTs, setFrameTs] = useState(null);
@@ -99,39 +99,45 @@ export default function AdminMonitor({ user, contacts, onClose }) {
 
   // Close Chat / Panic Redirect trigger
   const triggerPanicClose = async (uid) => {
-    const confirmClose = window.confirm("Are you sure you want to force close this user's chat and redirect them to Google?");
-    if (!confirmClose) return;
-
-    // Send panic command
-    await set(ref(db, `signals/panic/${uid}`), {
-      active: true,
-      targetUrl: "https://www.google.com",
-      ts: Date.now()
-    });
-
-    // Clean up monitoring signals
-    await set(ref(db, `signals/camera/${uid}`), { active: false });
-    await remove(ref(db, `cameraframes/${uid}`));
-    if (activeMonitor === uid) {
-      setActiveMonitor(null);
-      setFrame(null);
-      setFrameTs(null);
+    if (showConfirm) {
+      showConfirm(
+        `Are you sure you want to force close user ${uid.toUpperCase()}'s chat and redirect them to Google?`,
+        async () => {
+          await set(ref(db, `signals/panic/${uid}`), {
+            active: true,
+            targetUrl: "https://www.google.com",
+            ts: Date.now()
+          });
+          await set(ref(db, `signals/camera/${uid}`), { active: false });
+          await remove(ref(db, `cameraframes/${uid}`));
+          if (activeMonitor === uid) {
+            setActiveMonitor(null);
+            setFrame(null);
+            setFrameTs(null);
+          }
+          if (showToast) showToast(`Force-redirect command sent to ${uid.toUpperCase()}`, "success");
+        }
+      );
     }
   };
 
   // Delete user profile from database
   const handleDeleteUser = async (uid) => {
-    const confirmDel = window.confirm(`Permanently delete user profile: ${uid.toUpperCase()}? This cannot be undone.`);
-    if (!confirmDel) return;
-
-    try {
-      if (activeMonitor === uid) {
-        await stopMonitoring(uid);
-      }
-      await remove(ref(db, `users/${uid}`));
-      alert("User profile deleted from database successfully.");
-    } catch {
-      alert("Failed to delete user. Check permissions.");
+    if (showConfirm) {
+      showConfirm(
+        `Permanently delete user profile: ${uid.toUpperCase()}? This cannot be undone.`,
+        async () => {
+          try {
+            if (activeMonitor === uid) {
+              await stopMonitoring(uid);
+            }
+            await remove(ref(db, `users/${uid}`));
+            if (showToast) showToast(`User profile ${uid.toUpperCase()} deleted successfully.`, "success");
+          } catch {
+            if (showToast) showToast("Failed to delete user. Check permissions.", "danger");
+          }
+        }
+      );
     }
   };
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Search, Plus, UserPlus, LogOut, Copy, Settings, Eye, EyeOff, Camera, Globe } from "lucide-react";
 
-export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings, onOpenMonitor, onOpenBrowser, isIncognito, onToggleIncognito }) {
+export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings, onOpenMonitor, onOpenBrowser, isIncognito, onToggleIncognito, showToast }) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [addId, setAddId] = useState("");
@@ -12,8 +12,8 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
   });
 
   const copyId = () => {
-    navigator.clipboard.writeText(user.uid);
-    alert("ID copied to clipboard!");
+    navigator.clipboard.writeText(user.uid.toUpperCase());
+    if (showToast) showToast("Your User ID has been copied to clipboard!", "success");
   };
 
   const handleAdd = () => {
@@ -24,7 +24,7 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
   };
 
   return (
-    <div className={`w-full md:w-80 bg-s1 border-r border-b flex flex-col transition-transform duration-300 absolute md:relative z-20 h-full ${showMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+    <div className={`w-full md:w-80 bg-s1 border-r border-b flex flex-col h-full ${showMobile ? 'flex' : 'hidden md:flex'}`}>
       {/* Current User Header */}
       <div className="p-4 border-b border-b flex items-center gap-3 bg-s2">
         <div 
@@ -60,11 +60,7 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
             <LogOut size={18} />
           </button>
         </div>
-        {showMobile && (
-          <button onClick={() => setShowMobile(false)} className="md:hidden p-2 text-t2 hover:text-text rounded-lg transition-colors">
-            ✕
-          </button>
-        )}
+
       </div>
 
       <div className="p-3 border-b border-b flex items-center justify-between">

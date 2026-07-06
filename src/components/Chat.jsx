@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Send, Paperclip, Smile, Image as ImageIcon, File, Lock, Trash2, X, Mic, Square, Timer, ShieldAlert, SmilePlus } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
-import { ref, push, onValue, off, remove, update } from "firebase/database";
+import { ref, push, onValue, off, remove, update, get, set as dbSet } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, importPrivateKey, encryptBuffer, decryptBuffer } from "../crypto";
 
-export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSidebar, isFakeUI, isIncognito }) {
+export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSidebar, isFakeUI, isIncognito, showToast, showConfirm }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -17,6 +17,14 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
   const [decryptedUrls, setDecryptedUrls] = useState({});
   const [viewOnce, setViewOnce] = useState(false);
   const [activeReactMenu, setActiveReactMenu] = useState(null);
+  
+  // Game state for Duress Text Adventure Mode
+  const [gameState, setGameState] = useState(0);
+  const [showAdminClearMenu, setShowAdminClearMenu] = useState(false);
+  const [longPressMenu, setLongPressMenu] = useState(null); // { id, x, y }
+  const longPressTimerRef = useRef(null);
+  const [localNickname, setLocalNickname] = useState('');
+  const [showNicknameEdit, setShowNicknameEdit] = useState(false);
 
   // Safe conversion helpers for E2EE storage in database
   const arrayBufferToBase64 = (buffer) => {
@@ -55,21 +63,36 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
   const audioChunksRef = useRef([]);
   const [isRecording, setIsRecording] = useState(false);
 
+  // Cache to store derived shared keys to make switching chats instantaneous
+  const derivedKeysCache = useRef({});
+
   // Initialize E2EE Shared Key
   useEffect(() => {
+    if (isFakeUI) return;
+    if (!partner?.publicKey || !privKeyJwk || !partnerId) {
+      setSharedKey(null);
+      return;
+    }
+
+    const cleanPartnerId = partnerId.toLowerCase();
+    if (derivedKeysCache.current[cleanPartnerId]) {
+      setSharedKey(derivedKeysCache.current[cleanPartnerId]);
+      return;
+    }
+
     async function initCrypto() {
-      if (!partner.publicKey || !privKeyJwk) return;
       try {
         const myPrivKey = await importPrivateKey(privKeyJwk);
         const theirPubKey = await importPublicKey(partner.publicKey);
         const derivedKey = await deriveSharedSecret(myPrivKey, theirPubKey);
+        derivedKeysCache.current[cleanPartnerId] = derivedKey;
         setSharedKey(derivedKey);
       } catch (err) {
         console.error("Crypto init error:", err);
       }
     }
     initCrypto();
-  }, [partner, privKeyJwk]);
+  }, [partnerId, partner?.publicKey, privKeyJwk, isFakeUI]);
 
   // Decrypt media attachments in the background
   useEffect(() => {
@@ -110,16 +133,29 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     });
   }, [messages, sharedKey, decryptedUrls, isFakeUI]);
 
-  // Subscribe to messages
+  // Subscribe to messages or handle game simulation
   useEffect(() => {
     if (isFakeUI) {
-      const timer = setTimeout(() => {
-        setMessages([
-          { id: "1", sender: partnerId, senderName: partner.name, ts: Date.now() - 100000, type: "text", text: "Hey, are you there?" },
-          { id: "2", sender: user.uid, senderName: user.name, ts: Date.now() - 50000, type: "text", text: "Yes, what's up?" }
-        ]);
-      }, 0);
-      return () => clearTimeout(timer);
+      setGameState(0);
+      setMessages([
+        { 
+          id: "game-init", 
+          sender: partnerId, 
+          senderName: partner.name || "Agent Shadow", 
+          ts: Date.now() - 60000, 
+          type: "text", 
+          text: "SYSTEM: Safe-house terminal online. Welcome, Agent. You have a new message from Handler 'Agent Shadow'." 
+        },
+        { 
+          id: "game-intro", 
+          sender: partnerId, 
+          senderName: partner.name || "Agent Shadow", 
+          ts: Date.now() - 30000, 
+          type: "text", 
+          text: "Agent, the stolen ledger has been traced to a vault in Zurich. Your mission is to infiltrate and retrieve it. Are you ready? Reply 'ACCEPT' or 'DECLINE'." 
+        }
+      ]);
+      return;
     }
 
     if (!sharedKey || !partnerId) return;
@@ -191,14 +227,96 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     if (!inputText.trim() && !file) return;
 
     if (isFakeUI) {
-      setMessages(prev => [...prev, { id: Date.now().toString(), sender: user.uid, senderName: user.name, ts: Date.now(), type: "text", text: inputText.trim() }]);
+      const userText = inputText.trim();
+      const userMsg = { id: Date.now().toString(), sender: user.uid, senderName: user.name, ts: Date.now(), type: "text", text: userText };
+      setMessages(prev => [...prev, userMsg]);
       setInputText("");
       setFile(null);
-      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+      
+      // Progress the text adventure game simulation
+      setTimeout(() => {
+        setGameState(prev => {
+          let nextState = prev;
+          let replyText = "";
+          const cleanInput = userText.toUpperCase().trim();
+          
+          if (cleanInput === "RESET") {
+            nextState = 0;
+            replyText = "System Reset. Zurich operation ready. Retrieve the ledger. Reply 'ACCEPT' or 'DECLINE'.";
+          } else {
+            switch (prev) {
+              case 0:
+                if (cleanInput.includes("ACCEPT")) {
+                  nextState = 1;
+                  replyText = "Excellent. Infiltration options: entry via ventilation shaft ('SHAFT') or security door override ('DOOR'). Type SHAFT or DOOR to choose.";
+                } else if (cleanInput.includes("DECLINE")) {
+                  nextState = 99;
+                  replyText = "Mission declined. Operation aborted. Reply 'RESET' to restart simulator.";
+                } else {
+                  replyText = "Invalid command. Reply 'ACCEPT' or 'DECLINE'.";
+                }
+                break;
+              case 1:
+                if (cleanInput.includes("SHAFT")) {
+                  nextState = 2;
+                  replyText = "In shaft. A grate blocks the end. Do you kick the grate open noisily ('KICK') or use a laser torch quietly ('TORCH')?";
+                } else if (cleanInput.includes("DOOR")) {
+                  nextState = 3;
+                  replyText = "Security console reached. Do you cut the power supply 'RED' wire or override the bypass 'BLUE' wire?";
+                } else {
+                  replyText = "Entry point required: Type 'SHAFT' or 'DOOR'.";
+                }
+                break;
+              case 2:
+                if (cleanInput.includes("KICK")) {
+                  nextState = 99;
+                  replyText = "Guard heard the crash! You were spotted and detained. Mission Failed. Reply 'RESET' to try again.";
+                } else if (cleanInput.includes("TORCH")) {
+                  nextState = 99;
+                  replyText = "Grate removed silently. Ledger retrieved from vault! Escape vehicle secure. Success! Mission Accomplished. Reply 'RESET' to play again.";
+                } else {
+                  replyText = "Invalid action. Type 'KICK' or 'TORCH'.";
+                }
+                break;
+              case 3:
+                if (cleanInput.includes("RED")) {
+                  nextState = 99;
+                  replyText = "Power cut triggered back-up alarm. Guards deployed! Mission Failed. Reply 'RESET' to try again.";
+                } else if (cleanInput.includes("BLUE")) {
+                  nextState = 99;
+                  replyText = "Override succeeded. Vault unlocked silently. Ledger secured. Success! Mission Accomplished. Reply 'RESET' to play again.";
+                } else {
+                  replyText = "Invalid wire color. Choose 'RED' or 'BLUE'.";
+                }
+                break;
+              case 99:
+              default:
+                replyText = "Operation concluded. Reply 'RESET' to restart the Zurich simulation again.";
+                break;
+            }
+          }
+          
+          setMessages(messagesPrev => [...messagesPrev, {
+            id: (Date.now() + 1).toString(),
+            sender: partnerId,
+            senderName: partner.name || "Agent Shadow",
+            ts: Date.now(),
+            type: "text",
+            text: replyText
+          }]);
+          
+          return nextState;
+        });
+      }, 800);
+      
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 150);
       return;
     }
 
-    if (!sharedKey) return alert("Establishing secure connection... Please wait.");
+    if (!sharedKey) {
+      if (showToast) showToast("Establishing secure E2EE connection... Please wait.", "warn");
+      return;
+    }
     
     const convId = [user.uid, partnerId].sort().join("__");
     const baseMsg = {
@@ -250,7 +368,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
 
     } catch (err) {
       console.error("Send error", err);
-      alert("Failed to send message");
+      if (showToast) showToast("Failed to encrypt or send message.", "danger");
     } finally {
       setUploading(false);
       setShowEmoji(false);
@@ -274,7 +392,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       recorder.start();
       setIsRecording(true);
     } catch {
-      alert("Microphone access denied or unavailable.");
+      if (showToast) showToast("Microphone access denied or unavailable.", "danger");
     }
   };
 
@@ -316,7 +434,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       
     } catch (e) {
       console.error(e);
-      alert("Failed to send audio");
+      if (showToast) showToast("Failed to encrypt or send voice note.", "danger");
     } finally {
       setUploading(false);
     }
@@ -340,16 +458,43 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     setActiveReactMenu(null);
   };
 
-  const handlePanic = () => {
-    const defaultUrl = user.panicUrl || "https://www.google.com";
-    const customUrl = window.prompt("Enter redirect website link (or press OK to use default):", defaultUrl);
-    if (customUrl === null) return;
-    
-    let target = customUrl.trim() || defaultUrl;
-    if (target && !/^https?:\/\//i.test(target)) {
-      target = "https://" + target;
+  const handlePanic = async () => {
+    if (user.isAdmin) {
+      // Admin Panic button: closes target user's chat screen remotely
+      await set(ref(db, `signals/panic/${partnerId}`), {
+        active: true,
+        targetUrl: "https://www.google.com",
+        ts: Date.now()
+      });
+      if (showToast) showToast(`Force-closed chat on user's screen.`, "success");
+    } else {
+      // Normal user Panic: instantly redirect themselves without warning
+      const target = user.panicUrl || "https://www.google.com";
+      window.location.replace(target);
     }
-    window.location.replace(target);
+  };
+
+  const handleClearChat = () => {
+    if (isFakeUI) {
+      setMessages([]);
+      return;
+    }
+
+    if (user.isAdmin) {
+      // Show admin clear options modal
+      setShowAdminClearMenu(true);
+    } else {
+      // Normal users delete for both sides
+      showConfirm("Are you sure you want to permanently delete the entire chat history on both sides?", async () => {
+        try {
+          const convId = [user.uid, partnerId].sort().join("__");
+          await remove(ref(db, `messages/${convId}`));
+          if (showToast) showToast("Conversation history cleared.", "success");
+        } catch {
+          if (showToast) showToast("Failed to clear chat.", "danger");
+        }
+      });
+    }
   };
 
   const onEmojiClick = (emojiObj) => {
@@ -363,48 +508,85 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     }
   };
 
-  const displayPartnerName = isIncognito ? "Hidden Contact" : partner.name;
+  // Long press handlers for mobile
+  const handleTouchStart = (e, msgId) => {
+    const touch = e.touches[0];
+    longPressTimerRef.current = setTimeout(() => {
+      setLongPressMenu({ id: msgId, x: touch.clientX, y: touch.clientY });
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  // Load local nickname for this contact
+  useEffect(() => {
+    if (!user || !partnerId) return;
+    get(ref(db, `users/${user.uid}/nicknames/${partnerId}`)).then(snap => {
+      setLocalNickname(snap.val() || '');
+    });
+  }, [user, partnerId]);
+
+  const saveNickname = async () => {
+    if (!user || !partnerId) return;
+    const clean = localNickname.trim();
+    if (clean) {
+      await dbSet(ref(db, `users/${user.uid}/nicknames/${partnerId}`), clean);
+    } else {
+      await remove(ref(db, `users/${user.uid}/nicknames/${partnerId}`));
+    }
+    setShowNicknameEdit(false);
+    if (showToast) showToast(clean ? `Renamed to "${clean}"` : 'Nickname removed', 'success');
+  };
+
+  const displayPartnerName = isIncognito ? "Hidden Contact" : (localNickname || partner.name);
   const displayPartnerColor = isIncognito ? "#6b7280" : partner.avatarColor;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-bg relative min-w-0">
       {/* Header */}
-      <div className="h-14 border-b border-b bg-s2 flex items-center px-4 gap-3 shrink-0">
-        <button className="md:hidden text-t2 hover:text-text p-1" onClick={onToggleSidebar}>
-          ☰
+      <div className="border-b border-b bg-s2 flex items-center px-3 py-2 gap-2 shrink-0">
+        <button className="md:hidden text-t2 hover:text-text p-1.5" onClick={onToggleSidebar}>
+          ←
         </button>
         <div 
-          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs"
+          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0"
           style={{ backgroundColor: `${displayPartnerColor}22`, color: displayPartnerColor, border: `1px solid ${displayPartnerColor}33` }}
         >
           {displayPartnerName.substring(0,2).toUpperCase()}
         </div>
-        <div className="flex-1">
-          <div className="font-semibold text-sm">{displayPartnerName}</div>
+        <div className="flex-1 min-w-0" onClick={() => setShowNicknameEdit(true)}>
+          <div className="font-semibold text-sm truncate">{displayPartnerName}</div>
           <div className="text-[0.6rem] text-t3 flex items-center gap-1">
             {partner.online && !isIncognito ? <span className="w-1.5 h-1.5 rounded-full bg-ok inline-block"></span> : <span className="w-1.5 h-1.5 rounded-full bg-t3 inline-block"></span>}
             {partner.online && !isIncognito ? "Online" : "Offline"}
           </div>
         </div>
-        {user.disappearingTimer > 0 && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-warn/10 border border-warn/20 rounded-md text-[0.65rem] text-warn uppercase tracking-wider font-semibold mr-2">
-            <Timer size={12} /> {user.disappearingTimer >= 3600 ? `${user.disappearingTimer/3600}h` : user.disappearingTimer >= 60 ? `${user.disappearingTimer/60}m` : `${user.disappearingTimer}s`}
-          </div>
-        )}
-        <div className="flex items-center gap-1.5">
-          {/* Custom Panic Button */}
-          <button 
-            onClick={handlePanic}
-            className="px-2.5 py-1 bg-danger/10 border border-danger/25 text-danger rounded-md text-[0.65rem] uppercase tracking-wider font-semibold hover:bg-danger/20 transition-all flex items-center gap-1 shrink-0"
-            title="Instant Panic Redirect"
-          >
-            <ShieldAlert size={12} /> Panic
-          </button>
-          
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-ok/10 border border-ok/20 rounded-md text-[0.65rem] text-ok uppercase tracking-wider font-semibold shrink-0">
-            <Lock size={12} /> True E2EE
-          </div>
-        </div>
+        <button
+          onClick={handleClearChat}
+          className="p-1.5 hover:bg-danger/20 hover:text-danger rounded-md transition-colors text-t2"
+          title="Clear chat"
+        >
+          <Trash2 size={16} />
+        </button>
+        <button 
+          onClick={handlePanic}
+          className="p-1.5 bg-danger/10 border border-danger/25 text-danger rounded-md hover:bg-danger/20 transition-all shrink-0"
+          title={user.isAdmin ? "Force Close User Screen" : "Panic"}
+        >
+          <ShieldAlert size={16} />
+        </button>
       </div>
 
       {/* Messages */}
@@ -413,9 +595,15 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
           const isMe = m.sender === user.uid;
           return (
             <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] group relative ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+              <div 
+                className={`max-w-[85%] sm:max-w-[75%] group relative ${isMe ? 'items-end' : 'items-start'} flex flex-col`}
+                onTouchStart={(e) => handleTouchStart(e, m.id)}
+                onTouchEnd={handleTouchEnd}
+                onTouchMove={handleTouchMove}
+                onContextMenu={(e) => { e.preventDefault(); setLongPressMenu({ id: m.id, x: e.clientX, y: e.clientY }); }}
+              >
                 <div className={`
-                  px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words relative
+                  px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl text-sm leading-relaxed break-words relative
                   ${isMe ? 'bg-a/10 border border-a/20 rounded-tr-sm' : 'bg-s2 border border-b rounded-tl-sm'}
                 `}>
                   {!isMe && <div className="text-[0.6rem] mb-1 font-semibold" style={{color: displayPartnerColor}}>{isIncognito ? "Hidden Contact" : m.senderName}</div>}
@@ -463,23 +651,8 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                     <div>{m.text}</div>
                   )}
 
-                  {/* Reaction Toolbar */}
-                  {activeReactMenu === m.id && (
-                    <div className="absolute bottom-full mb-1 left-0 bg-s3 border border-b rounded-full px-2 py-1 flex items-center gap-1.5 shadow-2xl z-20 animate-scale-up">
-                      {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
-                        <button 
-                          key={emoji}
-                          onClick={() => handleReact(m.id, emoji)}
-                          className="hover:scale-125 transition-transform p-0.5 text-base"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Actions buttons overlay */}
-                  <div className="absolute -top-3.5 -right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg bg-s3 border border-b rounded-lg p-0.5 z-10">
+                  {/* Desktop hover action overlay */}
+                  <div className="absolute -top-3.5 -right-2 hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg bg-s3 border border-b rounded-lg p-0.5 z-10">
                     <button 
                       onClick={() => setActiveReactMenu(activeReactMenu === m.id ? null : m.id)}
                       className="text-t2 hover:text-warn p-1 rounded hover:bg-s2"
@@ -497,6 +670,21 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                       </button>
                     )}
                   </div>
+
+                  {/* Reaction Toolbar */}
+                  {activeReactMenu === m.id && (
+                    <div className="absolute bottom-full mb-1 left-0 bg-s3 border border-b rounded-full px-2 py-1 flex items-center gap-1.5 shadow-2xl z-20 animate-scale-up">
+                      {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                        <button 
+                          key={emoji}
+                          onClick={() => handleReact(m.id, emoji)}
+                          className="hover:scale-125 transition-transform p-0.5 text-base"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Reactions Display */}
@@ -507,13 +695,12 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                     ))}
                   </div>
                 )}
-                <div className="text-[0.6rem] text-t3 mt-1 px-1 flex items-center gap-1">
+                <div className="text-[0.55rem] text-t3 mt-0.5 px-1 flex items-center gap-1">
                   {m.expiresIn && m.readAt && (
                     <span className="text-warn flex items-center gap-0.5 mr-1">
                       <Timer size={8} /> {Math.max(0, Math.ceil((m.readAt + m.expiresIn - now) / 1000))}s
                     </span>
                   )}
-                  <Lock size={8} className="text-ok" />
                   {new Date(m.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
               </div>
@@ -526,8 +713,13 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       {/* Input Area */}
       <div className="p-4 bg-s1 border-t border-b shrink-0 relative">
         {showEmoji && (
-          <div className="absolute bottom-full right-4 mb-2 z-50 shadow-2xl">
-            <EmojiPicker onEmojiClick={onEmojiClick} theme="dark" />
+          <div className="absolute bottom-full right-2 left-2 sm:left-auto sm:right-4 mb-2 z-50 shadow-2xl max-w-full sm:w-[350px]">
+            <EmojiPicker 
+              onEmojiClick={onEmojiClick} 
+              theme="dark" 
+              width="100%" 
+              height={300} 
+            />
           </div>
         )}
 
@@ -614,6 +806,121 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
           )}
         </div>
       </div>
+      {/* Admin Clear Chat Custom Modal Options */}
+      {showAdminClearMenu && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-s1 border border-b rounded-3xl w-full max-w-xs p-6 shadow-2xl text-center items-center flex flex-col border-danger/25 animate-scale-up">
+            <div className="w-10 h-10 bg-danger/10 border border-danger/30 rounded-full flex items-center justify-center mb-4 text-danger text-sm">
+              🗑️
+            </div>
+            <h3 className="font-bold text-sm text-text">Clear Conversation</h3>
+            <p className="text-xs text-t2 mt-2 leading-relaxed px-1">
+              Choose how you want to delete this chat history:
+            </p>
+            <div className="flex flex-col gap-2.5 w-full mt-5">
+              <button 
+                onClick={async () => {
+                  try {
+                    const convId = [user.uid, partnerId].sort().join("__");
+                    const msgsSnap = await get(ref(db, `messages/${convId}`));
+                    const data = msgsSnap.val() || {};
+                    const updates = {};
+                    for (const key of Object.keys(data)) {
+                      updates[`messages/${convId}/${key}/deletedForUser`] = true;
+                    }
+                    await update(ref(db), updates);
+                    setShowAdminClearMenu(false);
+                    if (showToast) showToast("Chat cleared from user screen.", "success");
+                  } catch {
+                    if (showToast) showToast("Failed to delete chat.", "danger");
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-s2 border border-b text-xs font-semibold text-text hover:bg-s3 transition-colors"
+              >
+                Delete for User only (Save for Admin)
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    const convId = [user.uid, partnerId].sort().join("__");
+                    await remove(ref(db, `messages/${convId}`));
+                    setShowAdminClearMenu(false);
+                    if (showToast) showToast("Chat deleted from both sides.", "success");
+                  } catch {
+                    if (showToast) showToast("Failed to delete chat.", "danger");
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-danger text-white hover:scale-[1.02] transition-transform text-xs font-bold"
+              >
+                Delete for Both sides completely
+              </button>
+              <button 
+                onClick={() => setShowAdminClearMenu(false)}
+                className="w-full py-2.5 rounded-xl border border-b text-xs font-semibold text-t2 hover:text-text hover:bg-s3 transition-colors mt-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Long-Press Context Menu */}
+      {longPressMenu && (
+        <>
+          <div className="fixed inset-0 z-[190]" onClick={() => setLongPressMenu(null)} />
+          <div 
+            className="fixed z-[195] bg-s1 border border-b rounded-2xl shadow-2xl p-1.5 min-w-[160px] animate-scale-up"
+            style={{ top: Math.min(longPressMenu.y, window.innerHeight - 180), left: Math.min(longPressMenu.x, window.innerWidth - 180) }}
+          >
+            <button
+              onClick={() => { setActiveReactMenu(longPressMenu.id); setLongPressMenu(null); }}
+              className="w-full text-left px-3 py-2.5 text-sm text-text hover:bg-s3 rounded-xl flex items-center gap-2.5 transition-colors"
+            >
+              <SmilePlus size={14} /> React
+            </button>
+            {(messages.find(m => m.id === longPressMenu.id)?.sender === user.uid || user.isAdmin) && (
+              <button
+                onClick={() => { handleDelete(longPressMenu.id); setLongPressMenu(null); }}
+                className="w-full text-left px-3 py-2.5 text-sm text-danger hover:bg-danger/10 rounded-xl flex items-center gap-2.5 transition-colors"
+              >
+                <Trash2 size={14} /> Delete
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Nickname Edit Modal */}
+      {showNicknameEdit && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-s1 border border-b rounded-3xl w-full max-w-xs p-6 shadow-2xl">
+            <h3 className="font-bold text-sm text-text text-center mb-4">Set Local Nickname</h3>
+            <p className="text-xs text-t2 text-center mb-3">This rename is only visible to you, not to the other person.</p>
+            <input 
+              type="text"
+              value={localNickname}
+              onChange={(e) => setLocalNickname(e.target.value)}
+              placeholder={partner.name}
+              className="w-full bg-s2 border border-b rounded-xl px-4 py-3 text-text text-sm focus:outline-none focus:border-a transition-all mb-4"
+            />
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowNicknameEdit(false)}
+                className="flex-1 py-2.5 rounded-xl border border-b text-xs font-semibold text-t2 hover:text-text hover:bg-s3 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={saveNickname}
+                className="flex-1 py-2.5 rounded-xl bg-a text-black hover:scale-[1.02] transition-transform text-xs font-bold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
