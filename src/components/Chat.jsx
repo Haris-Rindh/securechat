@@ -15,6 +15,27 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
   const [sharedKey, setSharedKey] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [decryptedUrls, setDecryptedUrls] = useState({});
+
+  // Safe conversion helpers for E2EE storage in database
+  const arrayBufferToBase64 = (buffer) => {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  };
+
+  const base64ToArrayBuffer = (base64) => {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  };
   
   useEffect(() => {
     // Reset decrypted URLs when partner changes to maintain absolute privacy isolation
@@ -53,18 +74,25 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     if (isFakeUI || !sharedKey || messages.length === 0) return;
 
     messages.forEach(async (m) => {
-      if ((m.type === "image" || m.type === "file" || m.type === "audio") && m.url && !decryptedUrls[m.id]) {
+      if ((m.type === "image" || m.type === "file" || m.type === "audio") && !decryptedUrls[m.id]) {
         try {
-          const { ref: sRef, getBlob } = await import("firebase/storage");
-          const storageRefInstance = sRef(storage, m.url);
-          const encryptedBlob = await getBlob(storageRefInstance);
+          let decryptedBuffer;
+          if (m.fileData) {
+            const encryptedBuffer = base64ToArrayBuffer(m.fileData);
+            decryptedBuffer = await decryptBuffer(encryptedBuffer, sharedKey);
+          } else if (m.url) {
+            const { ref: sRef, getBlob } = await import("firebase/storage");
+            const storageRefInstance = sRef(storage, m.url);
+            const encryptedBlob = await getBlob(storageRefInstance);
+            const encryptedBuffer = await encryptedBlob.arrayBuffer();
+            decryptedBuffer = await decryptBuffer(encryptedBuffer, sharedKey);
+          } else {
+            return;
+          }
           
-          const encryptedBuffer = await encryptedBlob.arrayBuffer();
-          const decryptedBuffer = await decryptBuffer(encryptedBuffer, sharedKey);
-          
-          let mimeType = "application/octet-stream";
-          if (m.type === "image") mimeType = "image/jpeg";
-          else if (m.type === "audio") mimeType = "audio/webm";
+          let mimeType = m.mimeType || "application/octet-stream";
+          if (m.type === "image" && !m.mimeType) mimeType = "image/jpeg";
+          else if (m.type === "audio" && !m.mimeType) mimeType = "audio/webm";
           
           const decryptedBlob = new Blob([decryptedBuffer], { type: mimeType });
           const localUrl = URL.createObjectURL(decryptedBlob);
@@ -178,21 +206,17 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
 
     try {
       if (file) {
-        const fileRef = storageRef(storage, `chat_media/${convId}/${Date.now()}_${file.name}`);
-        
-        // Read file as ArrayBuffer and encrypt it using E2EE
+        // Read file as ArrayBuffer, encrypt it using E2EE, and convert to Base64
         const arrayBuffer = await file.arrayBuffer();
         const encryptedBuffer = await encryptBuffer(arrayBuffer, sharedKey);
-        const encryptedBlob = new Blob([encryptedBuffer], { type: "application/octet-stream" });
-        
-        await uploadBytes(fileRef, encryptedBlob);
-        const url = await getDownloadURL(fileRef);
+        const base64Data = arrayBufferToBase64(encryptedBuffer);
         
         await push(ref(db, `messages/${convId}`), {
           ...baseMsg,
           type: file.type.startsWith("image/") ? "image" : "file",
-          url,
-          fileName: file.name
+          fileData: base64Data,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream"
         });
         setFile(null);
       }
@@ -260,20 +284,17 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       baseMsg.expiresIn = user.disappearingTimer * 1000;
     }
     try {
-      const fileRef = storageRef(storage, `chat_media/${convId}/${Date.now()}_audio.webm`);
-      
-      // Read audio blob as ArrayBuffer and encrypt it using E2EE
+      // Read audio blob as ArrayBuffer, encrypt it using E2EE, and convert to Base64
       const arrayBuffer = await blob.arrayBuffer();
       const encryptedBuffer = await encryptBuffer(arrayBuffer, sharedKey);
-      const encryptedBlob = new Blob([encryptedBuffer], { type: "application/octet-stream" });
+      const base64Data = arrayBufferToBase64(encryptedBuffer);
       
-      await uploadBytes(fileRef, encryptedBlob);
-      const url = await getDownloadURL(fileRef);
       await push(ref(db, `messages/${convId}`), {
         ...baseMsg,
         type: "audio",
-        url,
-        fileName: "Voice Message"
+        fileData: base64Data,
+        fileName: "Voice Message",
+        mimeType: "audio/webm"
       });
 
       // Trigger notification for partner

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Search, Plus, UserPlus, LogOut, Copy, Settings, Eye, EyeOff } from "lucide-react";
+import { Search, Plus, UserPlus, LogOut, Copy, Settings, Eye, EyeOff, Camera, Globe } from "lucide-react";
 
-export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings, isIncognito, onToggleIncognito }) {
+export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings, onOpenMonitor, onOpenBrowser, isIncognito, onToggleIncognito }) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [addId, setAddId] = useState("");
@@ -36,13 +36,23 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-text truncate">{isIncognito ? "Incognito Active" : user.name}</div>
           <div className="text-[0.65rem] text-t3 flex items-center gap-1 cursor-pointer hover:text-a transition-colors" onClick={copyId}>
-            ID: {isIncognito ? "HIDDEN" : user.uid} <Copy size={10} />
+            ID: {isIncognito ? "HIDDEN" : user.uid.toUpperCase()} <Copy size={10} />
           </div>
         </div>
         <div className="flex items-center">
           <button onClick={onToggleIncognito} className={`p-2 rounded-lg transition-colors ${isIncognito ? 'text-a bg-a/10' : 'text-t2 hover:text-text'}`} title="Toggle Incognito">
             {isIncognito ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
+          {onOpenMonitor && (
+            <button onClick={onOpenMonitor} className="p-2 text-warn hover:text-warn hover:bg-warn/10 rounded-lg transition-colors" title="Parental Monitor">
+              <Camera size={18} />
+            </button>
+          )}
+          {onOpenBrowser && (
+            <button onClick={onOpenBrowser} className="p-2 text-t2 hover:text-a rounded-lg transition-colors" title="Web Viewer">
+              <Globe size={18} />
+            </button>
+          )}
           <button onClick={onOpenSettings} className="p-2 text-t2 hover:text-text rounded-lg transition-colors" title="Settings">
             <Settings size={18} />
           </button>
@@ -125,7 +135,7 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
                   <div>
                     <div className="font-semibold text-sm text-text truncate">{displayName}</div>
                     <div className="text-[0.65rem] text-t3 truncate">
-                      {displayId}
+                      {displayId.toUpperCase()}
                     </div>
                   </div>
                   {unreadMap[uid] && (
