@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ref, onValue, off, set, remove } from "firebase/database";
 import { db } from "../firebase";
-import { Camera, CameraOff, X, ShieldAlert, Minimize2, Maximize2, Power } from "lucide-react";
+import { Camera, CameraOff, X, ShieldAlert, Minimize2, Maximize2, Power, Trash2 } from "lucide-react";
 
 export default function AdminMonitor({ user, contacts, onClose }) {
   const [activeMonitor, setActiveMonitor] = useState(null);
@@ -116,6 +116,22 @@ export default function AdminMonitor({ user, contacts, onClose }) {
       setActiveMonitor(null);
       setFrame(null);
       setFrameTs(null);
+    }
+  };
+
+  // Delete user profile from database
+  const handleDeleteUser = async (uid) => {
+    const confirmDel = window.confirm(`Permanently delete user profile: ${uid.toUpperCase()}? This cannot be undone.`);
+    if (!confirmDel) return;
+
+    try {
+      if (activeMonitor === uid) {
+        await stopMonitoring(uid);
+      }
+      await remove(ref(db, `users/${uid}`));
+      alert("User profile deleted from database successfully.");
+    } catch {
+      alert("Failed to delete user. Check permissions.");
     }
   };
 
@@ -242,6 +258,15 @@ export default function AdminMonitor({ user, contacts, onClose }) {
                       title="Force Close & Redirect"
                     >
                       <Power size={11} />
+                    </button>
+
+                    {/* Delete User Button */}
+                    <button
+                      onClick={() => handleDeleteUser(uid)}
+                      className="p-1.5 bg-danger/10 border border-danger/25 text-danger rounded-lg hover:bg-danger/20 transition-all"
+                      title="Delete User profile"
+                    >
+                      <Trash2 size={11} />
                     </button>
                     
                     {activeMonitor === uid ? (

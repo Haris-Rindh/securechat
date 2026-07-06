@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { X, Volume2, ShieldAlert, Lock, Timer, Zap } from "lucide-react";
-import { ref, update } from "firebase/database";
-import { db } from "../firebase";
+import { X, Volume2, ShieldAlert, Lock, Timer, Zap, Link } from "lucide-react";
+import { ref, update, get, set, remove } from "firebase/database";
+import { updateEmail } from "firebase/auth";
+import { auth, db } from "../firebase";
 import { playNotificationTone } from "../audio";
 
 const TONES = [
@@ -29,11 +30,16 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
   const [tone, setTone] = useState(user.notificationTone || "none");
   const [name, setName] = useState(user.name);
   const [bio, setBio] = useState(user.bio || "");
+  const [newUid, setNewUid] = useState(user.uid.toUpperCase());
   const [lockPin, setLockPin] = useState(user.lockPin || "");
   const [duressPin, setDuressPin] = useState(user.duressPin || "");
   const [autoLockTimeout, setAutoLockTimeout] = useState(user.autoLockTimeout || 1);
   const [disappearingTimer, setDisappearingTimer] = useState(user.disappearingTimer || 0);
   const [panicTrigger, setPanicTrigger] = useState(user.panicTrigger || "DoubleEscape");
+  const [panicUrl, setPanicUrl] = useState(user.panicUrl || "https://www.google.com");
+  
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleTestTone = (selectedTone) => {
     setTone(selectedTone);
@@ -41,22 +47,76 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
   };
 
   const handleSave = async () => {
+    setLoading(true);
+    setErrorMsg("");
     try {
+      const cleanNewUid = newUid.trim().toLowerCase();
+      const oldUid = user.uid.toLowerCase();
+      let finalUid = user.uid;
+
+      // Handle User ID Change
+      if (cleanNewUid !== oldUid) {
+        if (cleanNewUid.length < 3) {
+          throw new Error("User ID must be at least 3 characters.");
+        }
+        if (!/^[a-z0-9_-]+$/.test(cleanNewUid)) {
+          throw new Error("User ID can only contain letters, numbers, hyphens, and underscores.");
+        }
+
+        // Check if new User ID already exists in database
+        const snap = await get(ref(db, `users/${cleanNewUid}`));
+        if (snap.exists()) {
+          throw new Error("This User ID is already taken. Try another.");
+        }
+
+        // Update email in Firebase Auth
+        const newEmail = `${cleanNewUid}@securechat.local`;
+        await updateEmail(auth.currentUser, newEmail);
+
+        // Fetch old user profile data to migrate
+        const oldUserSnap = await get(ref(db, `users/${oldUid}`));
+        const oldUserData = oldUserSnap.val() || {};
+
+        // Migrate profile node to new ID
+        const migratedUserData = {
+          ...oldUserData,
+          uid: cleanNewUid,
+          name: name.trim() || oldUserData.name
+        };
+        await set(ref(db, `users/${cleanNewUid}`), migratedUserData);
+        
+        // Delete old user node
+        await remove(ref(db, `users/${oldUid}`));
+
+        finalUid = cleanNewUid;
+      }
+
+      // Format custom Panic URL prefix if missing protocol
+      let formattedPanicUrl = panicUrl.trim();
+      if (formattedPanicUrl && !/^https?:\/\//i.test(formattedPanicUrl)) {
+        formattedPanicUrl = "https://" + formattedPanicUrl;
+      }
+
       const updates = { 
-        name, 
+        name: name.trim(), 
         bio, 
+        uid: finalUid,
         notificationTone: tone,
         lockPin,
         duressPin,
         autoLockTimeout: Number(autoLockTimeout),
         disappearingTimer: Number(disappearingTimer),
-        panicTrigger
+        panicTrigger,
+        panicUrl: formattedPanicUrl || "https://www.google.com"
       };
-      await update(ref(db, `users/${user.uid}`), updates);
+
+      await update(ref(db, `users/${finalUid}`), updates);
       onUpdate(updates);
       onClose();
-    } catch {
-      alert("Failed to save settings");
+    } catch (err) {
+      setErrorMsg(err.message || "Failed to save settings.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,19 +132,39 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-6">
+          {errorMsg && (
+            <div className="p-3 bg-danger/10 border border-danger/20 rounded-xl text-xs text-danger flex items-center gap-2">
+              <ShieldAlert size={14} className="shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           
           {/* Profile Section */}
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-t3 uppercase tracking-wider">Profile</h3>
-            <div>
-              <label className="block text-xs text-t2 mb-1.5 ml-1">Display Name</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={e => setName(e.target.value)}
-                className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors"
-              />
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-t2 mb-1.5 ml-1">Display Name</label>
+                <input 
+                  type="text" 
+                  value={name} 
+                  onChange={e => setName(e.target.value)}
+                  className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-t2 mb-1.5 ml-1">Unique User ID</label>
+                <input 
+                  type="text" 
+                  value={newUid} 
+                  onChange={e => setNewUid(e.target.value)}
+                  className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors font-mono uppercase"
+                  placeholder="USER-ID"
+                />
+              </div>
             </div>
+            
             <div>
               <label className="block text-xs text-t2 mb-1.5 ml-1">Bio (Optional)</label>
               <textarea 
@@ -163,20 +243,33 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs text-t2 mb-1.5 ml-1 flex items-center gap-1">
-                <Zap size={12} /> Panic Button Trigger
-              </label>
-              <select 
-                value={panicTrigger} 
-                onChange={e => setPanicTrigger(e.target.value)}
-                className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors appearance-none"
-              >
-                {PANIC_TRIGGERS.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-              <p className="text-[0.65rem] text-t3 mt-1 ml-1">Instantly redirects to Google to hide the app.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-t2 mb-1.5 ml-1 flex items-center gap-1">
+                  <Zap size={12} /> Panic Trigger
+                </label>
+                <select 
+                  value={panicTrigger} 
+                  onChange={e => setPanicTrigger(e.target.value)}
+                  className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors appearance-none"
+                >
+                  {PANIC_TRIGGERS.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-t2 mb-1.5 ml-1 flex items-center gap-1">
+                  <Link size={12} /> Panic Website
+                </label>
+                <input 
+                  type="text" 
+                  value={panicUrl}
+                  onChange={(e) => setPanicUrl(e.target.value)}
+                  className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-xs text-text focus:border-a outline-none transition-colors"
+                  placeholder="e.g. google.com"
+                />
+              </div>
             </div>
           </div>
 
@@ -187,8 +280,8 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
               <h3 className="text-xs font-bold text-warn uppercase tracking-wider">Stealth Notifications</h3>
             </div>
             <p className="text-[0.65rem] text-t2 leading-relaxed bg-warn/5 p-3 border border-warn/10 rounded-lg">
-              To keep your privacy absolute, notifications do not show banners on your screen or lock screen. 
-              Instead, pick a generic background sound that only <strong>you</strong> recognize. If someone else is using the device, they will assume it's a random system glitch or ambient noise.
+              To keep your privacy absolute, notifications do not show banners on your screen. 
+              Instead, pick a generic background sound that only you recognize.
             </p>
             
             <div className="space-y-2 mt-4">
@@ -214,11 +307,11 @@ export default function SettingsModal({ user, onClose, onUpdate }) {
         </div>
 
         <div className="p-4 border-t border-b bg-s2 flex gap-3 shrink-0">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-b text-t2 hover:text-text hover:bg-s3 transition-colors text-sm font-semibold">
+          <button onClick={onClose} disabled={loading} className="flex-1 py-2.5 rounded-xl border border-b text-t2 hover:text-text hover:bg-s3 transition-colors text-sm font-semibold disabled:opacity-50">
             Cancel
           </button>
-          <button onClick={handleSave} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-a to-a2 text-black hover:shadow-[0_0_15px_rgba(0,212,255,0.3)] transition-all text-sm font-bold">
-            Save Settings
+          <button onClick={handleSave} disabled={loading} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-a to-a2 text-black hover:shadow-[0_0_15px_rgba(0,212,255,0.3)] transition-all text-sm font-bold disabled:opacity-50">
+            {loading ? "Saving..." : "Save Settings"}
           </button>
         </div>
 

@@ -199,23 +199,7 @@ export default function Auth({ onLogin }) {
           <p className="text-[0.65rem] text-t3 mt-1">End-to-End Encrypted Messaging</p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex bg-s1 rounded-xl p-1 mb-6 border border-b gap-1">
-          <button
-            type="button"
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${mode === "login" ? "bg-s3 text-text shadow-md" : "text-t3 hover:text-t2"}`}
-            onClick={() => { setMode("login"); setError(""); }}
-          >
-            Login
-          </button>
-          <button
-            type="button"
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${mode === "register" ? "bg-s3 text-text shadow-md" : "text-t3 hover:text-t2"}`}
-            onClick={() => { setMode("register"); setError(""); }}
-          >
-            Sign Up
-          </button>
-        </div>
+        {/* We removed the tab switcher per your request to keep the login card clean */}
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
@@ -326,6 +310,33 @@ export default function Auth({ onLogin }) {
             {loading ? "Please wait..." : mode === "login" ? "Log In" : "Create Account"}
           </button>
         </form>
+
+        {/* Toggle Mode Navigation at the bottom */}
+        <div className="mt-6 text-center text-xs text-t2 border-t border-b/10 pt-4">
+          {mode === "login" ? (
+            <span>
+              Don't have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("register"); setError(""); }}
+                className="text-a hover:underline font-bold transition-all ml-1"
+              >
+                Sign Up
+              </button>
+            </span>
+          ) : (
+            <span>
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("login"); setError(""); }}
+                className="text-a hover:underline font-bold transition-all ml-1"
+              >
+                Log In
+              </button>
+            </span>
+          )}
+        </div>
 
       </div>
     </div>

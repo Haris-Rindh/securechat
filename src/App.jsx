@@ -287,6 +287,38 @@ export default function App() {
     return () => off(panicRef, "value", panicUnsub);
   }, [user]);
 
+  // Anti-Screenshot and Anti-Copy Protection for Normal Users
+  useEffect(() => {
+    if (!user || user.isAdmin) return;
+
+    const handleCopyCut = (e) => {
+      e.preventDefault();
+      alert("Copying and cutting text is disabled for security.");
+    };
+
+    const handleKeyDown = (e) => {
+      // Block PrintScreen key, Ctrl+P (Print), and Cmd+Shift+4 (Mac shot shortcut, though browser block is limited)
+      if (
+        e.key === "PrintScreen" || 
+        (e.key === "p" && (e.ctrlKey || e.metaKey)) ||
+        (e.key === "s" && (e.ctrlKey || e.metaKey) && e.shiftKey)
+      ) {
+        e.preventDefault();
+        alert("Screenshots and printing are disabled on this device.");
+      }
+    };
+
+    window.addEventListener("copy", handleCopyCut);
+    window.addEventListener("cut", handleCopyCut);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("copy", handleCopyCut);
+      window.removeEventListener("cut", handleCopyCut);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [user]);
+
   // Clear unread badge for active conversation
   useEffect(() => {
     if (user && activeConv && unreadMap[activeConv]) {
@@ -380,7 +412,7 @@ export default function App() {
   const displayedActivePartner = isFakeUI ? fakeContacts[displayedActiveConv] : activePartner;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg font-sans text-text">
+    <div className={`flex h-screen w-screen overflow-hidden bg-bg font-sans text-text ${!user?.isAdmin ? 'no-screenshot' : ''}`}>
 
       {/* Parental Monitoring Active Banner — shows name and user can dismiss */}
       {isBeingMonitored && !bannerDismissed && (

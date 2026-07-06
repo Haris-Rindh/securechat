@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Paperclip, Smile, Image as ImageIcon, File, Lock, Trash2, X, Mic, Square, Timer } from "lucide-react";
+import { Send, Paperclip, Smile, Image as ImageIcon, File, Lock, Trash2, X, Mic, Square, Timer, ShieldAlert, SmilePlus } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
-import { ref, push, onValue, off, remove } from "firebase/database";
+import { ref, push, onValue, off, remove, update } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, importPrivateKey, encryptBuffer, decryptBuffer } from "../crypto";
@@ -15,6 +15,8 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
   const [sharedKey, setSharedKey] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [decryptedUrls, setDecryptedUrls] = useState({});
+  const [viewOnce, setViewOnce] = useState(false);
+  const [activeReactMenu, setActiveReactMenu] = useState(null);
 
   // Safe conversion helpers for E2EE storage in database
   const arrayBufferToBase64 = (buffer) => {
@@ -74,6 +76,9 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
     if (isFakeUI || !sharedKey || messages.length === 0) return;
 
     messages.forEach(async (m) => {
+      if (m.type === "image" && m.viewOnce && m.opened) {
+        return; // skip decrypted loading if opened/deleted
+      }
       if ((m.type === "image" || m.type === "file" || m.type === "audio") && !decryptedUrls[m.id]) {
         try {
           let decryptedBuffer;
@@ -128,6 +133,10 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       const now = Date.now();
       
       for (const [key, val] of Object.entries(data)) {
+        if (val.deletedForUser && !user.isAdmin) {
+          continue; // skip rendering deleted messages for normal users
+        }
+
         if (val.expiresIn) {
           if (!val.readAt && val.sender !== user.uid) {
             import("firebase/database").then(({ update }) => {
@@ -216,9 +225,11 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
           type: file.type.startsWith("image/") ? "image" : "file",
           fileData: base64Data,
           fileName: file.name,
-          mimeType: file.type || "application/octet-stream"
+          mimeType: file.type || "application/octet-stream",
+          viewOnce: file.type.startsWith("image/") ? viewOnce : false
         });
         setFile(null);
+        setViewOnce(false);
       }
 
       if (inputText.trim()) {
@@ -313,7 +324,32 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
 
   const handleDelete = async (msgId) => {
     const convId = [user.uid, partnerId].sort().join("__");
-    await remove(ref(db, `messages/${convId}/${msgId}`));
+    if (user.isAdmin) {
+      // Mark as deleted for user, but keep in database for admin
+      await update(ref(db, `messages/${convId}/${msgId}`), { deletedForUser: true });
+    } else {
+      // Normal users delete completely
+      await remove(ref(db, `messages/${convId}/${msgId}`));
+    }
+  };
+
+  const handleReact = async (msgId, emoji) => {
+    const convId = [user.uid, partnerId].sort().join("__");
+    const reactionRef = ref(db, `messages/${convId}/${msgId}/reactions/${user.uid}`);
+    await set(reactionRef, emoji);
+    setActiveReactMenu(null);
+  };
+
+  const handlePanic = () => {
+    const defaultUrl = user.panicUrl || "https://www.google.com";
+    const customUrl = window.prompt("Enter redirect website link (or press OK to use default):", defaultUrl);
+    if (customUrl === null) return;
+    
+    let target = customUrl.trim() || defaultUrl;
+    if (target && !/^https?:\/\//i.test(target)) {
+      target = "https://" + target;
+    }
+    window.location.replace(target);
   };
 
   const onEmojiClick = (emojiObj) => {
@@ -355,8 +391,19 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
             <Timer size={12} /> {user.disappearingTimer >= 3600 ? `${user.disappearingTimer/3600}h` : user.disappearingTimer >= 60 ? `${user.disappearingTimer/60}m` : `${user.disappearingTimer}s`}
           </div>
         )}
-        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-ok/10 border border-ok/20 rounded-md text-[0.65rem] text-ok uppercase tracking-wider font-semibold">
-          <Lock size={12} /> True E2EE
+        <div className="flex items-center gap-1.5">
+          {/* Custom Panic Button */}
+          <button 
+            onClick={handlePanic}
+            className="px-2.5 py-1 bg-danger/10 border border-danger/25 text-danger rounded-md text-[0.65rem] uppercase tracking-wider font-semibold hover:bg-danger/20 transition-all flex items-center gap-1 shrink-0"
+            title="Instant Panic Redirect"
+          >
+            <ShieldAlert size={12} /> Panic
+          </button>
+          
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-ok/10 border border-ok/20 rounded-md text-[0.65rem] text-ok uppercase tracking-wider font-semibold shrink-0">
+            <Lock size={12} /> True E2EE
+          </div>
         </div>
       </div>
 
@@ -372,10 +419,29 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                   ${isMe ? 'bg-a/10 border border-a/20 rounded-tr-sm' : 'bg-s2 border border-b rounded-tl-sm'}
                 `}>
                   {!isMe && <div className="text-[0.6rem] mb-1 font-semibold" style={{color: displayPartnerColor}}>{isIncognito ? "Hidden Contact" : m.senderName}</div>}
+                  {m.deletedForUser && user.isAdmin && <div className="text-[0.55rem] uppercase tracking-wider text-danger font-bold mb-1">[Deleted for User]</div>}
                   
                   {m.type === "image" ? (
-                    decryptedUrls[m.id] ? (
-                      <img src={decryptedUrls[m.id]} alt="attached" className="max-w-full max-h-60 rounded-lg object-contain cursor-pointer" onClick={() => window.open(decryptedUrls[m.id], "_blank")} />
+                    m.viewOnce && m.opened ? (
+                      <div className="text-xs text-t3 p-3 italic flex items-center gap-1.5 animate-pulse">
+                        📷 Disappearing image opened & deleted
+                      </div>
+                    ) : decryptedUrls[m.id] ? (
+                      <img 
+                        src={decryptedUrls[m.id]} 
+                        alt="attached" 
+                        className="max-w-full max-h-60 rounded-lg object-contain cursor-pointer border border-b/20 shadow" 
+                        onClick={() => window.open(decryptedUrls[m.id], "_blank")}
+                        onLoad={() => {
+                          if (m.viewOnce && m.sender !== user.uid && !m.opened) {
+                            const convId = [user.uid, partnerId].sort().join("__");
+                            update(ref(db, `messages/${convId}/${m.id}`), {
+                              opened: true,
+                              fileData: null
+                            });
+                          }
+                        }}
+                      />
                     ) : (
                       <div className="text-xs text-t3 animate-pulse p-4">Decrypting image...</div>
                     )
@@ -397,15 +463,50 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
                     <div>{m.text}</div>
                   )}
 
-                  {isMe && (
-                    <button 
-                      onClick={() => handleDelete(m.id)}
-                      className="absolute -top-3 -right-2 bg-danger text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                  {/* Reaction Toolbar */}
+                  {activeReactMenu === m.id && (
+                    <div className="absolute bottom-full mb-1 left-0 bg-s3 border border-b rounded-full px-2 py-1 flex items-center gap-1.5 shadow-2xl z-20 animate-scale-up">
+                      {["👍", "❤️", "😂", "😮", "😢", "🙏"].map((emoji) => (
+                        <button 
+                          key={emoji}
+                          onClick={() => handleReact(m.id, emoji)}
+                          className="hover:scale-125 transition-transform p-0.5 text-base"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
                   )}
+
+                  {/* Actions buttons overlay */}
+                  <div className="absolute -top-3.5 -right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg bg-s3 border border-b rounded-lg p-0.5 z-10">
+                    <button 
+                      onClick={() => setActiveReactMenu(activeReactMenu === m.id ? null : m.id)}
+                      className="text-t2 hover:text-warn p-1 rounded hover:bg-s2"
+                      title="React"
+                    >
+                      <SmilePlus size={11} />
+                    </button>
+                    {(isMe || user.isAdmin) && (
+                      <button 
+                        onClick={() => handleDelete(m.id)}
+                        className="text-t2 hover:text-danger p-1 rounded hover:bg-s2"
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Reactions Display */}
+                {m.reactions && (
+                  <div className="flex flex-wrap gap-0.5 mt-1 bg-s3 px-2 py-0.5 rounded-full border border-b/20 w-fit text-[0.6rem]">
+                    {Object.entries(m.reactions).map(([ruid, emoji]) => (
+                      <span key={ruid} title={ruid === user.uid ? "You" : "Other"}>{emoji}</span>
+                    ))}
+                  </div>
+                )}
                 <div className="text-[0.6rem] text-t3 mt-1 px-1 flex items-center gap-1">
                   {m.expiresIn && m.readAt && (
                     <span className="text-warn flex items-center gap-0.5 mr-1">
@@ -431,10 +532,21 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
         )}
 
         {file && (
-          <div className="mb-2 flex items-center gap-2 bg-s2 border border-b px-3 py-2 rounded-lg max-w-sm">
+          <div className="mb-2 flex items-center gap-3 bg-s2 border border-b px-3 py-2 rounded-lg max-w-sm">
             {file.type.startsWith('image/') ? <ImageIcon size={16} className="text-a" /> : <File size={16} className="text-a" />}
             <span className="text-xs truncate flex-1">{file.name}</span>
-            <button onClick={() => setFile(null)} className="text-t2 hover:text-danger"><X size={16} /></button>
+            {file.type.startsWith("image/") && (
+              <label className="flex items-center gap-1 text-[0.65rem] text-warn select-none bg-s3 px-2 py-1 rounded border border-warn/20 cursor-pointer shrink-0">
+                <input 
+                  type="checkbox"
+                  checked={viewOnce}
+                  onChange={(e) => setViewOnce(e.target.checked)}
+                  className="accent-warn w-3 h-3"
+                />
+                <span>View Once</span>
+              </label>
+            )}
+            <button onClick={() => { setFile(null); setViewOnce(false); }} className="text-t2 hover:text-danger shrink-0"><X size={16} /></button>
           </div>
         )}
 
