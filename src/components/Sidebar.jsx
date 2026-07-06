@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Search, Plus, UserPlus, LogOut, Copy, Settings } from "lucide-react";
+import { Search, Plus, UserPlus, LogOut, Copy, Settings, Eye, EyeOff } from "lucide-react";
 
-export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings }) {
+export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings, isIncognito, onToggleIncognito }) {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [addId, setAddId] = useState("");
 
-  const filteredContacts = Object.entries(contacts).filter(([uid, c]) => 
-    c.name?.toLowerCase().includes(search.toLowerCase()) || uid.includes(search.toUpperCase())
-  );
+  const filteredContacts = Object.entries(contacts).filter(([uid, c]) => {
+    if (isIncognito) return true; // Show all dummy users when searching in incognito
+    return c.name?.toLowerCase().includes(search.toLowerCase()) || uid.includes(search.toUpperCase());
+  });
 
   const copyId = () => {
     navigator.clipboard.writeText(user.uid);
@@ -33,12 +34,15 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
           {user.name.substring(0,2).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-text truncate">{user.name}</div>
+          <div className="font-semibold text-text truncate">{isIncognito ? "Incognito Active" : user.name}</div>
           <div className="text-[0.65rem] text-t3 flex items-center gap-1 cursor-pointer hover:text-a transition-colors" onClick={copyId}>
-            ID: {user.uid} <Copy size={10} />
+            ID: {isIncognito ? "HIDDEN" : user.uid} <Copy size={10} />
           </div>
         </div>
         <div className="flex items-center">
+          <button onClick={onToggleIncognito} className={`p-2 rounded-lg transition-colors ${isIncognito ? 'text-a bg-a/10' : 'text-t2 hover:text-text'}`} title="Toggle Incognito">
+            {isIncognito ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
           <button onClick={onOpenSettings} className="p-2 text-t2 hover:text-text rounded-lg transition-colors" title="Settings">
             <Settings size={18} />
           </button>
@@ -95,8 +99,12 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
         {filteredContacts.length === 0 ? (
           <div className="text-center text-t3 text-xs mt-8">No contacts found</div>
         ) : (
-          filteredContacts.map(([uid, c]) => {
+          filteredContacts.map(([uid, c], idx) => {
             const isActive = activeConv === uid;
+            const displayName = isIncognito ? `Hidden Contact ${idx + 1}` : c.name;
+            const displayId = isIncognito ? "HIDDEN-ID" : uid;
+            const displayColor = isIncognito ? "#6b7280" : c.avatarColor;
+            
             return (
               <div 
                 key={uid}
@@ -108,16 +116,16 @@ export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, on
               >
                 <div 
                   className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs relative shrink-0"
-                  style={{ backgroundColor: `${c.avatarColor}22`, color: c.avatarColor, border: `1px solid ${c.avatarColor}33` }}
+                  style={{ backgroundColor: `${displayColor}22`, color: displayColor, border: `1px solid ${displayColor}33` }}
                 >
-                  {c.name.substring(0,2).toUpperCase()}
+                  {displayName.substring(0,2).toUpperCase()}
                   {c.online && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-ok rounded-full border-2 border-s1"></div>}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center justify-between">
                   <div>
-                    <div className="font-semibold text-sm text-text truncate">{c.name}</div>
+                    <div className="font-semibold text-sm text-text truncate">{displayName}</div>
                     <div className="text-[0.65rem] text-t3 truncate">
-                      {uid}
+                      {displayId}
                     </div>
                   </div>
                   {unreadMap[uid] && (

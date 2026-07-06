@@ -100,3 +100,23 @@ export async function decryptMessage(cipher, sharedKey) {
     return "[Encrypted message - could not decrypt]";
   }
 }
+
+// Encrypt ArrayBuffer using Shared Secret (prepends 12-byte IV to ciphertext)
+export async function encryptBuffer(arrayBuffer, sharedKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, sharedKey, arrayBuffer);
+  const result = new Uint8Array(iv.length + enc.byteLength);
+  result.set(iv, 0);
+  result.set(new Uint8Array(enc), iv.length);
+  return result.buffer;
+}
+
+// Decrypt ArrayBuffer using Shared Secret (extracts 12-byte IV and decrypts ciphertext)
+export async function decryptBuffer(arrayBuffer, sharedKey) {
+  const raw = new Uint8Array(arrayBuffer);
+  const iv = raw.slice(0, 12);
+  const data = raw.slice(12);
+  const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, sharedKey, data);
+  return dec;
+}
+
