@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { useState, useEffect } from "react";
 import { X, Volume2, ShieldAlert, Lock, Timer, Zap, Link, Camera, Key } from "lucide-react";
+=======
+import { useState } from "react";
+import { X, Volume2, ShieldAlert, Lock, Timer, Zap, Link } from "lucide-react";
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
 import { ref, update, get, set, remove } from "firebase/database";
 import { updateEmail } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -39,6 +44,7 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
   const [panicTrigger, setPanicTrigger] = useState(user.panicTrigger || "DoubleEscape");
   const [panicUrl, setPanicUrl] = useState(user.panicUrl || "https://www.google.com");
   
+<<<<<<< HEAD
   const [avatarB64, setAvatarB64] = useState("");
   const [newPublicKey, setNewPublicKey] = useState(null);
   const [newEncPrivateKey, setNewEncPrivateKey] = useState(null);
@@ -99,6 +105,10 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
       setLoading(false);
     }
   };
+=======
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
 
   const handleTestTone = (selectedTone) => {
     setTone(selectedTone);
@@ -113,6 +123,7 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
       const oldUid = user.uid.toLowerCase();
       let finalUid = user.uid;
 
+<<<<<<< HEAD
       // Encrypt avatar if changed/set
       let encryptedAvatarData = user.avatarData || "";
       if (avatarB64) {
@@ -125,6 +136,8 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
         formattedPanicUrl = "https://" + formattedPanicUrl;
       }
 
+=======
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
       // Handle User ID Change
       if (cleanNewUid !== oldUid) {
         if (cleanNewUid.length < 3) {
@@ -152,6 +165,7 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
         const migratedUserData = {
           ...oldUserData,
           uid: cleanNewUid,
+<<<<<<< HEAD
           name: name.trim() || oldUserData.name,
           avatarData: encryptedAvatarData
         };
@@ -189,6 +203,25 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
       }
 
       const updatePayload = { 
+=======
+          name: name.trim() || oldUserData.name
+        };
+        await set(ref(db, `users/${cleanNewUid}`), migratedUserData);
+        
+        // Delete old user node
+        await remove(ref(db, `users/${oldUid}`));
+
+        finalUid = cleanNewUid;
+      }
+
+      // Format custom Panic URL prefix if missing protocol
+      let formattedPanicUrl = panicUrl.trim();
+      if (formattedPanicUrl && !/^https?:\/\//i.test(formattedPanicUrl)) {
+        formattedPanicUrl = "https://" + formattedPanicUrl;
+      }
+
+      const updates = { 
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
         name: name.trim(), 
         bio, 
         uid: finalUid,
@@ -198,6 +231,7 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
         autoLockTimeout: Number(autoLockTimeout),
         disappearingTimer: Number(disappearingTimer),
         panicTrigger,
+<<<<<<< HEAD
         panicUrl: formattedPanicUrl || "https://www.google.com",
         avatarData: encryptedAvatarData
       };
@@ -207,6 +241,13 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
       }
 
       onUpdate(updatePayload);
+=======
+        panicUrl: formattedPanicUrl || "https://www.google.com"
+      };
+
+      await update(ref(db, `users/${finalUid}`), updates);
+      onUpdate(updates);
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
       onClose();
     } catch (err) {
       setErrorMsg(err.message || "Failed to save settings.");
@@ -238,6 +279,7 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-t3 uppercase tracking-wider">Profile</h3>
             
+<<<<<<< HEAD
             {/* E2EE Display Picture (DP) Upload */}
             <div className="flex items-center gap-4 bg-s2 p-3.5 border border-b rounded-2xl">
               <div className="relative group shrink-0">
@@ -283,6 +325,30 @@ export default function SettingsModal({ user, passwordKey, onClose, onUpdate, sh
               </div>
             </div>
             
+=======
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-t2 mb-1.5 ml-1">Display Name</label>
+                <input 
+                  type="text" 
+                  value={name} 
+                  onChange={e => setName(e.target.value)}
+                  className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-t2 mb-1.5 ml-1">Unique User ID</label>
+                <input 
+                  type="text" 
+                  value={newUid} 
+                  onChange={e => setNewUid(e.target.value)}
+                  className="w-full bg-bg border border-b rounded-xl px-4 py-2.5 text-sm text-text focus:border-a outline-none transition-colors font-mono uppercase"
+                  placeholder="USER-ID"
+                />
+              </div>
+            </div>
+            
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
             <div>
               <label className="block text-xs text-t2 mb-1.5 ml-1">Bio (Optional)</label>
               <textarea 

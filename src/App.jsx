@@ -370,7 +370,10 @@ export default function App() {
       
       setUser(userData);
       setPrivKeyJwk(decPrivKey);
+<<<<<<< HEAD
       setPasswordKey(pwdKey);
+=======
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
     } catch (err) {
       console.error("Failed to decrypt private key:", err);
       showToast("Key decryption failed. E2EE messaging is disabled.", "danger");
@@ -473,6 +476,16 @@ export default function App() {
             setUser(newUser);
           }}
           showToast={showToast}
+        />
+      )}
+
+      {showAdminMonitor && user?.isAdmin && (
+        <AdminMonitor
+          user={user}
+          contacts={contacts}
+          onClose={() => setShowAdminMonitor(false)}
+          showToast={showToast}
+          showConfirm={showConfirm}
         />
       )}
 

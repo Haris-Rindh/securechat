@@ -12,7 +12,11 @@ export default function DuressGame({ onExit }) {
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [highScore, setHighScore] = useState(() => {
+<<<<<<< HEAD
     try { return parseInt(localStorage.getItem("_fb_session_metric") || "0", 10); } catch { return 0; }
+=======
+    try { return parseInt(localStorage.getItem("cr_hs") || "0", 10); } catch { return 0; }
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
   });
   const [started, setStarted] = useState(false);
 
@@ -489,11 +493,19 @@ export default function DuressGame({ onExit }) {
           setGameOver(true);
           const final = G.score;
           setScore(final);
+<<<<<<< HEAD
             setHighScore(prev => {
               const best = Math.max(prev, final);
               try { localStorage.setItem("_fb_session_metric", best.toString()); } catch {}
               return best;
             });
+=======
+          setHighScore(prev => {
+            const best = Math.max(prev, final);
+            try { localStorage.setItem("cr_hs", best.toString()); } catch {}
+            return best;
+          });
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
           break;
         }
       }

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useState, useEffect } from "react";
+=======
+import { useState } from "react";
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
 import { Search, Plus, UserPlus, LogOut, Copy, Settings, Eye, EyeOff, Camera, Globe } from "lucide-react";
 
 export default function Sidebar({ user, contacts, activeConv, unreadMap = {}, onSelectConv, onAddContact, onLogout, showMobile, setShowMobile, onOpenSettings, onOpenMonitor, onOpenBrowser, isIncognito, onToggleIncognito, showToast }) {

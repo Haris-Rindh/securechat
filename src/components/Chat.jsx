@@ -25,6 +25,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
   const longPressTimerRef = useRef(null);
   const [localNickname, setLocalNickname] = useState('');
   const [showNicknameEdit, setShowNicknameEdit] = useState(false);
+<<<<<<< HEAD
   
   const [decryptedAvatar, setDecryptedAvatar] = useState("");
 
@@ -39,6 +40,8 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
       decrypt();
     }
   }, [partner?.avatarData, partnerId]);
+=======
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
 
   // Safe conversion helpers for E2EE storage in database
   const arrayBufferToBase64 = (buffer) => {
@@ -187,6 +190,7 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
           continue; // skip rendering deleted messages for normal users
         }
 
+<<<<<<< HEAD
         // Mark all incoming messages as read when decrypted/loaded by recipient
         if (!val.readAt && val.sender !== user.uid) {
           import("firebase/database").then(({ update }) => {
@@ -195,6 +199,8 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
           val.readAt = now;
         }
 
+=======
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
         if (val.expiresIn) {
           if (val.readAt && now > val.readAt + val.expiresIn) {
             remove(ref(db, `messages/${convId}/${key}`));
@@ -577,7 +583,11 @@ export default function Chat({ user, privKeyJwk, partnerId, partner, onToggleSid
           ←
         </button>
         <div 
+<<<<<<< HEAD
           className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden"
+=======
+          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0"
+>>>>>>> af7619453dffa22c175d0c4d612abf4a293056ab
           style={{ backgroundColor: `${displayPartnerColor}22`, color: displayPartnerColor, border: `1px solid ${displayPartnerColor}33` }}
         >
           {decryptedAvatar && !isIncognito ? (
