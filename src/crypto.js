@@ -120,3 +120,38 @@ export async function decryptBuffer(arrayBuffer, sharedKey) {
   return dec;
 }
 
+// Derives a symmetric key from a UID to encrypt/decrypt avatars E2EE-style
+export async function deriveKeyFromUid(uid) {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(uid.toLowerCase()));
+  return await crypto.subtle.importKey(
+    "raw",
+    hashBuffer,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+// Encrypt Avatar Base64 String using UID-derived Key
+export async function encryptAvatar(base64String, uid) {
+  const key = await deriveKeyFromUid(uid);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = new TextEncoder().encode(base64String);
+  const enc = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+  return btoa(String.fromCharCode(...iv) + String.fromCharCode(...new Uint8Array(enc)));
+}
+
+// Decrypt Avatar Base64 String using UID-derived Key
+export async function decryptAvatar(cipherBase64, uid) {
+  try {
+    const key = await deriveKeyFromUid(uid);
+    const raw = atob(cipherBase64);
+    const iv = new Uint8Array([...raw].slice(0, 12).map(c => c.charCodeAt(0)));
+    const data = new Uint8Array([...raw].slice(12).map(c => c.charCodeAt(0)));
+    const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return new TextDecoder().decode(dec);
+  } catch (err) {
+    return "";
+  }
+}
+
