@@ -1,69 +1,105 @@
 # SecureChat
 
-SecureChat is a browser-based, true End-to-End Encrypted (E2EE) messaging application designed for high privacy. It runs entirely on the client-side, using Firebase for real-time synchronization and the Web Crypto API for local encryption.
+SecureChat is a privacy-first messaging app built with React + Vite. Messages and media are encrypted in the browser before they are stored in Firebase, so the backend cannot read plaintext chat content.
 
-## Cryptographic Architecture
+## What it does
 
-SecureChat implements a zero-trust model where the database server cannot decrypt messages, files, or audio.
+- End-to-end encrypted text, files, images, and voice messages
+- Local key management with Web Crypto (PBKDF2, ECDH, AES-GCM)
+- Stealth/privacy controls (auto-lock PIN, duress mode, panic redirect)
+- Disappearing messages and unread indicators
+- PWA-ready frontend for installable web usage
 
-1. **Key Derivation (PBKDF2):** When a user logs in, a cryptographic key is derived from their passphrase and unique user ID using PBKDF2 with SHA-256 and 100,000 iterations.
-2. **Private Key Encryption:** The user's ECDH private key is encrypted client-side using AES-GCM (256-bit) with the derived password key before being stored in Firebase. The private key remains encrypted at rest on the database.
-3. **Secure In-Memory Handling:** Upon authentication, the client decrypts the ECDH private key. This key is kept strictly in-memory (in React application state) and is never written to persistent browser storage like localStorage or sessionStorage. It is purged immediately on tab closure or logout.
-4. **Key Exchange (ECDH):** For each chat session, the application imports the user's private key and the recipient's public key (P-256 curve) to derive a shared AES-GCM (256-bit) secret.
-5. **Message & Media Encryption (AES-GCM):**
-   - **Text Messages:** Encrypted locally before transmission.
-   - **Media Attachments & Voice Messages:** Selected files and recorded WebM audio are read as an ArrayBuffer, encrypted using the derived shared key, and uploaded as binary blobs to Firebase Storage. When received, the encrypted data is downloaded, decrypted client-side, and loaded via secure local Object URLs.
+## Architecture at a glance
 
-## Features
+SecureChat follows a client-side zero-trust model:
 
-- **End-to-End Encryption:** Applies to all text messages, image attachments, files, and voice recordings.
-- **Stealth Audio Notifications:** Alerts are played as synthesized sounds using the Web Audio API (such as low-frequency taps or soft sine waves) to prevent showing visible desktop notification banners.
-- **Access Lock PIN:** Auto-locks the application screen after user inactivity or when the tab is hidden.
-- **Duress PIN:** Entering a designated duress PIN loads a secondary user interface populated with mock contacts and messages to protect user privacy.
-- **Panic Redirect:** Keyboard shortcuts instantly redirect the page to a generic website to conceal app usage.
-- **Disappearing Messages:** Deletes messages from the database after a specified timer starting from when the recipient opens the message.
-- **Progressive Web App (PWA):** Installs natively on mobile and desktop platforms.
+1. A password-derived key (PBKDF2) is generated locally from user input.
+2. The user’s ECDH private key is encrypted client-side and stored encrypted in Firebase.
+3. A shared key is derived per conversation (ECDH).
+4. Messages/media are encrypted/decrypted locally with AES-GCM.
+5. Firebase Realtime Database + Storage are used only for sync/storage of encrypted payloads.
 
-## Configuration
+## Runtime requirements
 
-The application requires Firebase credentials. Create a `.env` file at the root of the project with the following configuration:
+- Node.js + npm (for local development/build)
+- A Firebase project with:
+  - Authentication
+  - Realtime Database
+  - Cloud Storage
 
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
-VITE_FIREBASE_DATABASE_URL=your_database_url
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
+## Local setup
+
+1. **Install dependencies**
+
+   ```bash
+   npm ci
+   ```
+
+2. **Create environment file**
+
+   Create a `.env` file in the project root:
+
+   ```env
+   VITE_FIREBASE_API_KEY=your_api_key
+   VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
+   VITE_FIREBASE_DATABASE_URL=your_database_url
+   VITE_FIREBASE_PROJECT_ID=your_project_id
+   VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+   VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+   VITE_FIREBASE_APP_ID=your_app_id
+   VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
+   ```
+
+   These values are read in `src/firebase.js`. Use your own Firebase project values for local development.
+
+3. **Start development server**
+
+   ```bash
+   npm run dev
+   ```
+
+4. **Open the app**
+
+   Vite prints a local URL (typically `http://localhost:5173`).
+
+## Available scripts
+
+Defined in `package.json`:
+
+- `npm run dev` – start local Vite dev server
+- `npm run build` – create production build in `dist/`
+- `npm run preview` – preview the built app locally
+- `npm run lint` – run ESLint
+
+## Project structure
+
+```text
+securechat/
+├── src/
+│   ├── App.jsx                # Top-level app shell and global state
+│   ├── firebase.js            # Firebase initialization/config
+│   ├── crypto.js              # Web Crypto helpers (key derivation, E2EE ops)
+│   ├── audio.js               # Stealth notification sounds
+│   └── components/
+│       ├── Auth.jsx
+│       ├── Chat.jsx
+│       ├── Sidebar.jsx
+│       ├── SettingsModal.jsx
+│       ├── AdminMonitor.jsx
+│       ├── BrowserPanel.jsx
+│       └── DuressGame.jsx
+├── public/                    # Static assets
+├── dist/                      # Production build output
+└── vite.config.js             # Vite + PWA configuration
 ```
 
-## Build and Deployment
+## Firebase security rules (recommended baseline)
 
-To run the application locally or compile the production bundle:
+Apply strict Firebase rules in production so users can only read/write permitted paths.
 
-### Installation
-```bash
-npm install
-```
+### Realtime Database
 
-### Local Development
-```bash
-npm run dev
-```
-
-### Production Build
-```bash
-npm run build
-```
-The compiled static build is written to the `dist/` directory, which can be deployed directly to static hosting platforms such as Vercel, Netlify, or Firebase Hosting.
-
-## Firebase Security Rules
-
-To secure your deployment, apply the following security rules in your Firebase Console.
-
-### Realtime Database Rules
 ```json
 {
   "rules": {
@@ -83,7 +119,8 @@ To secure your deployment, apply the following security rules in your Firebase C
 }
 ```
 
-### Firebase Storage Rules
+### Cloud Storage
+
 ```javascript
 rules_version = '2';
 service firebase.storage {
@@ -93,4 +130,13 @@ service firebase.storage {
     }
   }
 }
+```
+
+## Contributor quick check
+
+Before opening a PR, run:
+
+```bash
+npm run lint
+npm run build
 ```
